@@ -177,7 +177,10 @@ let adUrlMap = {};
 let sortKey = '', sortDir = -1;
 
 // ── Date ──────────────────────────────────────────────────
-function toYMD(d) { return d.toISOString().slice(0, 10); }
+function toYMD(d) {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
 function applyPreset(days) {
   const to = new Date(), from = new Date();
   from.setDate(to.getDate() - days + 1);
