@@ -135,9 +135,9 @@
     <button class="preset-btn" onclick="applyPresetMonth()">本月</button>
   </div>
   <div class="date-inputs">
-    <input type="date" id="dateFrom">
+    <input type="date" id="dateFrom" onchange="clearPreset()">
     <span style="color:#bbb">至</span>
-    <input type="date" id="dateTo">
+    <input type="date" id="dateTo" onchange="clearPreset()">
   </div>
   <button class="fetch-btn" id="fetchBtn" data-manual="true" onclick="fetchData(true)">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
@@ -180,6 +180,9 @@ let sortKey = '', sortDir = -1;
 function toYMD(d) {
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
+}
+function clearPreset() {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
 }
 function applyPreset(days) {
   const to = new Date(), from = new Date();
