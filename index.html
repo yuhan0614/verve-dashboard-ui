@@ -129,8 +129,8 @@
 <div class="controls">
   <div class="preset-btns">
     <button class="preset-btn" onclick="applyPreset(1)">今天</button>
-    <button class="preset-btn" onclick="applyPreset(7)">近7天</button>
-    <button class="preset-btn active" onclick="applyPreset(30)">近30天</button>
+    <button class="preset-btn active" onclick="applyPreset(7)">近7天</button>
+    <button class="preset-btn" onclick="applyPreset(30)">近30天</button>
     <button class="preset-btn" onclick="applyPreset(90)">近90天</button>
     <button class="preset-btn" onclick="applyPresetMonth()">本月</button>
   </div>
@@ -195,7 +195,7 @@ function applyPresetMonth() {
 }
 (function() {
   const to = new Date(), from = new Date();
-  from.setDate(to.getDate() - 29);
+  from.setDate(to.getDate() - 6);
   document.getElementById('dateFrom').value = toYMD(from);
   document.getElementById('dateTo').value = toYMD(to);
 })();
