@@ -333,12 +333,13 @@ function renderPerf(camps, trend, since, until) {
   // charts
   if (trendChart) trendChart.destroy();
   if (pieChart) pieChart.destroy();
-  const tDates = trend.map(r=>r.date_start);
+  const filteredTrend = trend.filter(r => r.date_start >= since && r.date_start <= until);
+  const tDates = filteredTrend.map(r=>r.date_start);
   trendChart = new Chart(document.getElementById('trendChart'), {
     data: { labels: tDates, datasets: [
-      { type:'bar',  label:'花費',  data: trend.map(r=>r.spend||0), backgroundColor:'rgba(82,196,26,0.3)', borderColor:'#52c41a', borderWidth:1, yAxisID:'y', borderRadius:3 },
-      { type:'line', label:'ROAS',  data: trend.map(r=>r.roas||0),  borderColor:'#1877f2', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y2' },
-      { type:'line', label:'購買',  data: trend.map(r=>r.purchase||0), borderColor:'#fa8c16', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y3' },
+      { type:'bar',  label:'花費',  data: filteredTrend.map(r=>r.spend||0), backgroundColor:'rgba(82,196,26,0.3)', borderColor:'#52c41a', borderWidth:1, yAxisID:'y', borderRadius:3 },
+      { type:'line', label:'ROAS',  data: filteredTrend.map(r=>r.roas||0),  borderColor:'#1877f2', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y2' },
+      { type:'line', label:'購買',  data: filteredTrend.map(r=>r.purchase||0), borderColor:'#fa8c16', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y3' },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:false}},
       scales: {
