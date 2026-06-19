@@ -149,6 +149,7 @@
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('perf')">📊 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 素材</button>
+  <button class="tab-btn" onclick="switchTab('demo')">👥 年齡性別</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -159,6 +160,11 @@
 <div class="main">
   <!-- 成效 tab -->
   <div class="tab-panel active" id="tab-perf">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
+  <!-- 年齡性別 tab -->
+  <div class="tab-panel" id="tab-demo">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -227,15 +233,17 @@ async function fetchData(forceRefresh = false) {
   const force = forceRefresh;
 
   try {
-    const [campRes, trendRes, adRes, urlRes] = await Promise.all([
+    const [campRes, trendRes, adRes, urlRes, demoRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/ad_urls?account=${ACCOUNT_ID}`),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=age,gender${force?'&force=true':''}`),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
     const adJson    = await adRes.json();
+    const demoJson  = await demoRes.json();
     const campData  = campJson.data || [];
     const trendData = trendJson.data || [];
     allAdData       = adJson.data || [];
@@ -243,6 +251,7 @@ async function fetchData(forceRefresh = false) {
 
     renderPerf(campData, trendData, since, until);
     renderCreative();
+    renderDemographic(demoJson.data || []);
     const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
     const isCached  = campJson.cached;
     document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
@@ -478,6 +487,82 @@ function renderAdTable(data) {
       <td>${fmtM(r.cpa)}</td>
     </tr>`;
   }).join('');
+}
+
+function renderDemographic(data) {
+  const el = document.getElementById('tab-demo');
+  if (!data.length) {
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;">無資料</div>';
+    return;
+  }
+
+  // 按性別分組
+  const genders = [...new Set(data.map(r => r.gender))].sort();
+  const ages    = [...new Set(data.map(r => r.age))].sort((a,b) => {
+    const n = s => parseInt(s)||0;
+    return n(a) - n(b);
+  });
+
+  // 計算總花費（用於佔比）
+  const totalSpend = data.reduce((s,r) => s+(+r.spend||0), 0);
+
+  const gLabel = { male:'男性', female:'女性', unknown:'不明' };
+
+  // 按性別建表
+  const tables = genders.map(g => {
+    const rows = data.filter(r => r.gender === g).sort((a,b) => {
+      const n = s => parseInt(s)||0;
+      return n(a.age) - n(b.age);
+    });
+    const gSpend = rows.reduce((s,r) => s+(+r.spend||0), 0);
+    return `
+    <div class="table-card" style="margin-bottom:20px">
+      <div class="table-header">
+        <h3>${gLabel[g]||g} <span style="font-size:12px;color:#888;font-weight:400;margin-left:8px;">花費佔比 ${totalSpend?((gSpend/totalSpend)*100).toFixed(1):'0'}%</span></h3>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>年齡</th>
+            <th>花費</th>
+            <th>曝光</th>
+            <th>點擊</th>
+            <th>CTR</th>
+            <th>CPLC</th>
+            <th>加車</th>
+            <th>購買</th>
+            <th>ROAS</th>
+          </tr></thead>
+          <tbody>
+          ${rows.map(r => {
+            const spend   = +r.spend||0;
+            const imp     = +r.impressions||0;
+            const clicks  = +r.inline_link_clicks||0;
+            const ctr     = imp ? (clicks/imp*100) : 0;
+            const cplc    = clicks ? spend/clicks : 0;
+            const atc     = +r.add_to_cart||0;
+            const pur     = +r.purchase||0;
+            const purVal  = +r.purchase_value||0;
+            const roas    = spend ? purVal/spend : 0;
+            return `<tr>
+              <td><strong>${r.age}</strong></td>
+              <td>${fmtM(spend)}</td>
+              <td>${fmtN(imp)}</td>
+              <td>${fmtN(clicks)}</td>
+              <td>${fmtP(ctr)}</td>
+              <td>${cplc?fmtM(cplc):'<span class="na">—</span>'}</td>
+              <td>${fmtN(atc)}</td>
+              <td>${fmtN(pur)}</td>
+              <td class="${rc(roas)}">${roas?roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="padding:20px">${tables}</div>`;
 }
 
 fetchData();
