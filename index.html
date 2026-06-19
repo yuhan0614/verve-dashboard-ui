@@ -129,6 +129,7 @@
 <div class="controls">
   <div class="preset-btns">
     <button class="preset-btn" onclick="applyPreset(1)">今天</button>
+    <button class="preset-btn" onclick="applyPresetYesterday()">昨天</button>
     <button class="preset-btn active" onclick="applyPreset(7)">近7天</button>
     <button class="preset-btn" onclick="applyPreset(30)">近30天</button>
     <button class="preset-btn" onclick="applyPreset(90)">近90天</button>
@@ -189,6 +190,14 @@ function applyPreset(days) {
   from.setDate(to.getDate() - days + 1);
   document.getElementById('dateFrom').value = toYMD(from);
   document.getElementById('dateTo').value = toYMD(to);
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+function applyPresetYesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  document.getElementById('dateFrom').value = toYMD(d);
+  document.getElementById('dateTo').value = toYMD(d);
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
 }
