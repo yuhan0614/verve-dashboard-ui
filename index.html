@@ -496,21 +496,19 @@ function renderDemographic(data) {
     return;
   }
 
-  // 按性別分組
-  const genders = [...new Set(data.map(r => r.gender))].sort();
-  const ages    = [...new Set(data.map(r => r.age))].sort((a,b) => {
-    const n = s => parseInt(s)||0;
-    return n(a) - n(b);
-  });
+  // 過濾掉沒有 breakdown 的資料
+  const valid = data.filter(r => r.age && r.gender && r.age !== 'undefined' && r.gender !== 'undefined');
+  if (!valid.length) {
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;">此帳號不支援年齡性別拆分，或 Meta API 未回傳 breakdown 資料</div>';
+    return;
+  }
 
-  // 計算總花費（用於佔比）
-  const totalSpend = data.reduce((s,r) => s+(+r.spend||0), 0);
-
+  const genders = [...new Set(valid.map(r => r.gender))].sort();
+  const totalSpend = valid.reduce((s,r) => s+(+r.spend||0), 0);
   const gLabel = { male:'男性', female:'女性', unknown:'不明' };
 
-  // 按性別建表
   const tables = genders.map(g => {
-    const rows = data.filter(r => r.gender === g).sort((a,b) => {
+    const rows = valid.filter(r => r.gender === g).sort((a,b) => {
       const n = s => parseInt(s)||0;
       return n(a.age) - n(b.age);
     });
@@ -537,7 +535,7 @@ function renderDemographic(data) {
           ${rows.map(r => {
             const spend   = +r.spend||0;
             const imp     = +r.impressions||0;
-            const clicks  = +r.inline_link_clicks||0;
+            const clicks  = +r.link_clicks||0;
             const ctr     = imp ? (clicks/imp*100) : 0;
             const cplc    = clicks ? spend/clicks : 0;
             const atc     = +r.add_to_cart||0;
