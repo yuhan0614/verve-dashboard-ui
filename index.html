@@ -559,9 +559,9 @@ function renderDemographic(ageData, genderData) {
       </tr>`;
     }).join('');
     return `
-      <div style="display:flex;gap:16px;padding:16px 20px;align-items:center">
-        <div style="width:200px;flex-shrink:0"><canvas id="${pieId}" height="180"></canvas></div>
-        <div style="flex:1;min-width:0"><canvas id="${barId}" height="120"></canvas></div>
+      <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
+        <div style="width:280px;flex-shrink:0"><canvas id="${pieId}"></canvas></div>
+        <div style="flex:1;min-width:0"><canvas id="${barId}"></canvas></div>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
@@ -577,28 +577,71 @@ function renderDemographic(ageData, genderData) {
     const labels = rows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
     const spends = rows.map(r => +r.spend||0);
     const roases = rows.map(r => +r.roas||0);
+    const totalSpend = spends.reduce((a,b)=>a+b, 0);
+    const dimName = labelKey === 'age' ? '年齡' : '性別';
+
     const colors = labelKey === 'gender'
       ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
       : PIE_COLORS.slice(0, rows.length);
 
     new Chart(document.getElementById(pieId), {
-      type:'doughnut',
-      data:{ labels, datasets:[{ data:spends, backgroundColor:colors, borderWidth:2 }] },
-      options:{ plugins:{ legend:{ position:'bottom', labels:{ font:{size:11}, boxWidth:12 } }, title:{ display:true, text:'花費分佈', font:{size:12} } }, cutout:'60%' }
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: spends, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+      options: {
+        cutout: '60%',
+        plugins: {
+          title: { display: true, text: `花費分佈（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 12 } },
+          legend: {
+            position: 'bottom',
+            labels: {
+              font: { size: 11 },
+              boxWidth: 12,
+              padding: 8,
+              generateLabels: chart => {
+                const ds = chart.data.datasets[0];
+                return chart.data.labels.map((lbl, i) => {
+                  const val = ds.data[i]||0;
+                  const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
+                  return {
+                    text: `${lbl} ${pct}%`,
+                    fillStyle: ds.backgroundColor[i],
+                    strokeStyle: ds.backgroundColor[i],
+                    index: i
+                  };
+                });
+              }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const val = ctx.parsed;
+                const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
+                return ` ${fmtM(val)} (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
     });
+
     new Chart(document.getElementById(barId), {
-      data:{
+      data: {
         labels,
-        datasets:[
-          { type:'bar', label:'花費', data:spends, backgroundColor:colors.map(c=>c+'99'), borderColor:colors, borderWidth:1, yAxisID:'y', borderRadius:3 },
-          { type:'line', label:'ROAS', data:roases, borderColor:'#f7954f', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2' }
+        datasets: [
+          { type:'bar', label:'花費', data:spends, backgroundColor: colors.map(c=>c+'88'), borderColor: colors, borderWidth:1, yAxisID:'y', borderRadius:4 },
+          { type:'line', label:'ROAS', data:roases, borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointStyle:'circle', pointRadius:4, pointBackgroundColor:'#fff', pointBorderColor:'#e8833a', pointBorderWidth:2, tension:0.3, yAxisID:'y2' }
         ]
       },
-      options:{
-        plugins:{ legend:{ position:'top' }, title:{ display:true, text:'花費 / ROAS', font:{size:12} } },
-        scales:{
-          y:{ position:'left', title:{ display:true, text:'花費' } },
-          y2:{ position:'right', title:{ display:true, text:'ROAS' }, grid:{ drawOnChartArea:false } }
+      options: {
+        plugins: {
+          title: { display: true, text: `花費 / ROAS（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 8 } },
+          legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 14, padding: 12 } }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { position:'left', title: { display:true, text:'花費', font:{size:11} }, grid: { color:'#f0f0f0' } },
+          y2: { position:'right', title: { display:true, text:'ROAS', font:{size:11} }, grid: { drawOnChartArea:false } }
         }
       }
     });
