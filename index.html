@@ -150,6 +150,7 @@
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('perf')">📊 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 素材</button>
+  <button class="tab-btn" onclick="switchTab('demo')">👥 年齡性別</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -160,6 +161,11 @@
 <div class="main">
   <!-- 成效 tab -->
   <div class="tab-panel active" id="tab-perf">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
+  <!-- 年齡性別 tab -->
+  <div class="tab-panel" id="tab-demo">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -236,15 +242,19 @@ async function fetchData(forceRefresh = false) {
   const force = forceRefresh;
 
   try {
-    const [campRes, trendRes, adRes, urlRes] = await Promise.all([
+    const [campRes, trendRes, adRes, urlRes, ageRes, genderRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/ad_urls?account=${ACCOUNT_ID}`),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=age`),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=gender`),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
     const adJson    = await adRes.json();
+    const ageJson   = await ageRes.json();
+    const genderJson= await genderRes.json();
     const campData  = campJson.data || [];
     const trendData = trendJson.data || [];
     allAdData       = adJson.data || [];
@@ -252,6 +262,7 @@ async function fetchData(forceRefresh = false) {
 
     renderPerf(campData, trendData, since, until);
     renderCreative();
+    renderDemographic(ageJson.data || [], genderJson.data || []);
     const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
     const isCached  = campJson.cached;
     document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
@@ -487,6 +498,86 @@ function renderAdTable(data) {
       <td>${fmtM(r.cpa)}</td>
     </tr>`;
   }).join('');
+}
+
+function renderDemographic(ageData, genderData) {
+  const el = document.getElementById('tab-demo');
+
+  function buildTable(rows, labelKey, labelMap) {
+    if (!rows.length) return '<p style="color:#aaa;padding:20px">無資料</p>';
+    const totalSpend = rows.reduce((s,r) => s+(+r.spend||0), 0);
+    return `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>${labelKey==='age'?'年齡':'性別'}</th>
+          <th>花費佔比</th>
+          <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
+        </tr></thead>
+        <tbody>
+        ${rows.map(r => {
+          const spend  = +r.spend||0;
+          const imp    = +r.impressions||0;
+          const clicks = +r.link_clicks||0;
+          const ctr    = +r.ctr||0;
+          const cplc   = +r.cplc||0;
+          const atc    = +r.add_to_cart||0;
+          const pur    = +r.purchase||0;
+          const pv     = +r.purchase_value||0;
+          const roas   = +r.roas||0;
+          const cpa    = pur ? spend/pur : 0;
+          const pct    = totalSpend ? (spend/totalSpend*100).toFixed(1) : '0';
+          const label  = labelMap?.[r[labelKey]] || r[labelKey] || '—';
+          return `<tr>
+            <td><strong>${label}</strong></td>
+            <td><div style="display:flex;align-items:center;gap:6px"><div style="width:${Math.round(+pct*0.8)}px;height:6px;background:#52c41a;border-radius:3px"></div>${pct}%</div></td>
+            <td>${fmtM(spend)}</td>
+            <td>${fmtN(imp)}</td>
+            <td>${fmtN(clicks)}</td>
+            <td>${fmtP(ctr)}</td>
+            <td>${cplc?fmtM(cplc):'<span class="na">—</span>'}</td>
+            <td>${fmtN(atc)}</td>
+            <td>${fmtN(pur)}</td>
+            <td>${fmtM(pv)}</td>
+            <td class="${rc(roas)}">${roas?roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+            <td>${cpa?fmtM(cpa):'<span class="na">—</span>'}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  // 年齡：排序
+  const ageOrder = ['13-17','18-24','25-34','35-44','45-54','55-64','65+','Unknown'];
+  const ageSorted = [...ageData].filter(r=>r.age).sort((a,b) => {
+    const ai = ageOrder.indexOf(a.age), bi = ageOrder.indexOf(b.age);
+    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  });
+
+  // 性別：排序
+  const genderOrder = ['male','female','unknown','男性','女性','不明'];
+  const genderMap = { male:'男性', female:'女性', unknown:'不明' };
+  const genderSorted = [...genderData].filter(r=>r.gender).sort((a,b) => {
+    const ai = genderOrder.indexOf(a.gender), bi = genderOrder.indexOf(b.gender);
+    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  });
+
+  if (!ageSorted.length && !genderSorted.length) {
+    el.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;">無資料</div>';
+    return;
+  }
+
+  el.innerHTML = `<div style="padding:20px">
+    <div class="table-card" style="margin-bottom:20px">
+      <div class="table-header"><h3>年齡分析</h3></div>
+      ${buildTable(ageSorted, 'age', null)}
+    </div>
+    <div class="table-card">
+      <div class="table-header"><h3>性別分析</h3></div>
+      ${buildTable(genderSorted, 'gender', genderMap)}
+    </div>
+  </div>`;
 }
 
 fetchData();
