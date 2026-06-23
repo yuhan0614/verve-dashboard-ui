@@ -542,18 +542,10 @@ function renderAdTable(data) {
 
 function renderDemographic(ageData, genderData) {
   const el = document.getElementById('tab-demo');
-
   const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6','#f59e0b','#aaa'];
 
-  function buildSection(rows, labelKey, labelMap, pieId, barId) {
+  function buildSectionHTML(rows, labelKey, labelMap, pieId, barId) {
     if (!rows.length) return '<p style="color:#aaa;padding:20px">無資料</p>';
-    const labels = rows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
-    const spends = rows.map(r => +r.spend||0);
-    const roases = rows.map(r => +r.roas||0);
-    const colors = labelKey === 'gender'
-      ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
-      : PIE_COLORS.slice(0, rows.length);
-
     const tableRows = rows.map(r => {
       const spend = +r.spend||0, pur = +r.purchase||0, roas = +r.roas||0;
       const cpa = pur ? spend/pur : 0;
@@ -572,44 +564,50 @@ function renderDemographic(ageData, genderData) {
         <td>${cpa?fmtM(cpa):'<span class="na">—</span>'}</td>
       </tr>`;
     }).join('');
-
     return `
       <div style="display:flex;gap:16px;padding:16px 20px;align-items:center">
         <div style="width:200px;flex-shrink:0"><canvas id="${pieId}" height="180"></canvas></div>
         <div style="flex:1;min-width:0"><canvas id="${barId}" height="120"></canvas></div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th>${labelKey==='age'?'年齡':'性別'}</th>
-            <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
-          </tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </div>
-      <script>
-      new Chart(document.getElementById('${pieId}'), {
-        type:'doughnut',
-        data:{ labels:${JSON.stringify(labels)}, datasets:[{ data:${JSON.stringify(spends)}, backgroundColor:${JSON.stringify(colors)}, borderWidth:2 }] },
-        options:{ plugins:{ legend:{ position:'bottom', labels:{ font:{size:11}, boxWidth:12 } }, title:{ display:true, text:'花費分佈', font:{size:12} } }, cutout:'60%' }
-      });
-      new Chart(document.getElementById('${barId}'), {
-        data:{
-          labels:${JSON.stringify(labels)},
-          datasets:[
-            { type:'bar', label:'花費', data:${JSON.stringify(spends)}, backgroundColor:${JSON.stringify(colors.map(c=>c+'99'))}, borderColor:${JSON.stringify(colors)}, borderWidth:1, yAxisID:'y', borderRadius:3 },
-            { type:'line', label:'ROAS', data:${JSON.stringify(roases)}, borderColor:'#f7954f', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2' }
-          ]
-        },
-        options:{
-          plugins:{ legend:{ position:'top' }, title:{ display:true, text:'花費 / ROAS', font:{size:12} } },
-          scales:{
-            y:{ position:'left', title:{ display:true, text:'花費' } },
-            y2:{ position:'right', title:{ display:true, text:'ROAS' }, grid:{ drawOnChartArea:false } }
-          }
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>${labelKey==='age'?'年齡':'性別'}</th>
+          <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table></div>`;
+  }
+
+  function buildCharts(rows, labelKey, labelMap, pieId, barId) {
+    if (!rows.length) return;
+    const labels = rows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
+    const spends = rows.map(r => +r.spend||0);
+    const roases = rows.map(r => +r.roas||0);
+    const colors = labelKey === 'gender'
+      ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
+      : PIE_COLORS.slice(0, rows.length);
+
+    new Chart(document.getElementById(pieId), {
+      type:'doughnut',
+      data:{ labels, datasets:[{ data:spends, backgroundColor:colors, borderWidth:2 }] },
+      options:{ plugins:{ legend:{ position:'bottom', labels:{ font:{size:11}, boxWidth:12 } }, title:{ display:true, text:'花費分佈', font:{size:12} } }, cutout:'60%' }
+    });
+    new Chart(document.getElementById(barId), {
+      data:{
+        labels,
+        datasets:[
+          { type:'bar', label:'花費', data:spends, backgroundColor:colors.map(c=>c+'99'), borderColor:colors, borderWidth:1, yAxisID:'y', borderRadius:3 },
+          { type:'line', label:'ROAS', data:roases, borderColor:'#f7954f', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2' }
+        ]
+      },
+      options:{
+        plugins:{ legend:{ position:'top' }, title:{ display:true, text:'花費 / ROAS', font:{size:12} } },
+        scales:{
+          y:{ position:'left', title:{ display:true, text:'花費' } },
+          y2:{ position:'right', title:{ display:true, text:'ROAS' }, grid:{ drawOnChartArea:false } }
         }
-      });
-      <\/script>`;
+      }
+    });
   }
 
   const ageOrder = ['13-17','18-24','25-34','35-44','45-54','55-64','65+','Unknown'];
@@ -633,13 +631,16 @@ function renderDemographic(ageData, genderData) {
   el.innerHTML = `<div style="padding:20px">
     <div class="table-card" style="margin-bottom:20px">
       <div class="table-header"><h3>年齡分析</h3></div>
-      ${buildSection(ageSorted, 'age', null, 'agePieChart', 'ageBarChart')}
+      ${buildSectionHTML(ageSorted, 'age', null, 'agePieChart', 'ageBarChart')}
     </div>
     <div class="table-card">
       <div class="table-header"><h3>性別分析</h3></div>
-      ${buildSection(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
+      ${buildSectionHTML(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
     </div>
   </div>`;
+
+  buildCharts(ageSorted, 'age', null, 'agePieChart', 'ageBarChart');
+  buildCharts(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart');
 }
 
 // ── CSV parser ────────────────────────────────────────────────
