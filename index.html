@@ -770,6 +770,7 @@ function renderGoogleAds(data, since, until) {
   const ageRows    = buildAgg(data.age,      ['年齡層']);
   const genderRows = buildAgg(data.gender,   ['性別']);
   const locRows    = buildAgg(data.location, ['城市']);
+  const campRows   = buildAgg(data.adgroup,  ['廣告活動']);
   const agRows     = buildAgg(data.adgroup,  ['廣告活動','廣告群組']);
   const kwRows     = buildAgg(data.keyword,  ['廣告群組','關鍵字','比對類型']);
 
@@ -808,8 +809,8 @@ function renderGoogleAds(data, since, until) {
   const totalRoas = total.spend > 0 ? total.revenue/total.spend : 0;
   const totalCpc  = total.clk > 0 ? total.spend/total.clk : 0;
 
-  const agSorted = [...agRows].sort((a,b) => b.spend-a.spend);
-  const maxAgSpend = agSorted[0]?.spend || 1;
+  const campSorted = [...campRows].sort((a,b) => b.spend-a.spend);
+  const maxCampSpend = campSorted[0]?.spend || 1;
 
   const gadsColors = ['#4285f4','#34a853','#fbbc04','#ea4335','#9c27b0','#00bcd4','#ff9800','#795548'];
 
@@ -841,18 +842,18 @@ function renderGoogleAds(data, since, until) {
     </div>
     <div class="table-card">
       <div class="table-header">
-        <h3>🎯 廣告群組成效</h3>
-        <span style="font-size:12px;color:#aaa;">${agSorted.length} 個廣告群組</span>
+        <h3>🎯 廣告活動成效</h3>
+        <span style="font-size:12px;color:#aaa;">${campSorted.length} 個廣告活動</span>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>廣告群組</th><th>花費</th><th>佔比</th><th>曝光</th><th>點擊</th><th>CTR</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
+          <th>廣告活動</th><th>花費</th><th>佔比</th><th>曝光</th><th>點擊</th><th>CTR</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
         </tr></thead>
-        <tbody>${agSorted.map((r,i) => {
+        <tbody>${campSorted.map((r,i) => {
           const pct = total.spend > 0 ? (r.spend/total.spend*100).toFixed(1) : '0';
-          const bw = Math.round(r.spend/maxAgSpend*80);
+          const bw = Math.round(r.spend/maxCampSpend*80);
           return `<tr>
-            <td><span class="cell-name" title="${r['廣告群組']}">${r['廣告群組']||'—'}</span></td>
+            <td><span class="cell-name" title="${r['廣告活動']}">${r['廣告活動']||'—'}</span></td>
             <td>${fmtM(r.spend)}</td>
             <td><div class="spend-bar-wrap"><span style="font-size:11px;color:#888">${pct}%</span><div class="spend-bar" style="width:${bw}px;background:${gadsColors[i%gadsColors.length]}"></div></div></td>
             <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr)}</td>
@@ -890,7 +891,7 @@ function renderGoogleAds(data, since, until) {
   if (gadsPieChart) gadsPieChart.destroy();
   gadsPieChart = new Chart(document.getElementById('gadsPieChart'), {
     type:'doughnut',
-    data: { labels: agSorted.map(r=>r['廣告群組']||'—'), datasets:[{ data:agSorted.map(r=>r.spend), backgroundColor:gadsColors, borderWidth:2, borderColor:'white' }] },
+    data: { labels: campSorted.map(r=>r['廣告活動']||'—'), datasets:[{ data:campSorted.map(r=>r.spend), backgroundColor:gadsColors, borderWidth:2, borderColor:'white' }] },
     options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ font:{size:10}, boxWidth:10, padding:6 } } } }
   });
 
