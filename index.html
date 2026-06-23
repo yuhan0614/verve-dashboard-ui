@@ -866,10 +866,6 @@ function renderGoogleAds(data, since, until) {
     <div class="table-card" style="margin-top:20px">
       <div class="table-header"><h3>🔑 關鍵字成效</h3><span style="font-size:12px;color:#aaa;">${kwRows.length} 組關鍵字</span></div>
       ${gadsTable(kwRows, [{label:'廣告群組',key:'廣告群組'},{label:'關鍵字',key:'關鍵字'},{label:'比對類型',key:'比對類型'},...metricCols])}
-    </div>
-    <div class="table-card" style="margin-top:20px">
-      <div class="table-header"><h3>📍 位置成效</h3></div>
-      ${gadsTable(locRows, [{label:'城市',key:'城市'},...metricCols])}
     </div>`;
 
   // 趨勢圖
