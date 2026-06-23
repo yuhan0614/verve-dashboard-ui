@@ -157,9 +157,8 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('perf')">📊 成效</button>
-  <button class="tab-btn" onclick="switchTab('creative')">🎨 素材</button>
-  <button class="tab-btn" onclick="switchTab('demo')">👥 年齡性別</button>
+  <button class="tab-btn active" onclick="switchTab('perf')">📊 Meta 成效</button>
+  <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
 </div>
 
@@ -176,11 +175,6 @@
 
   <!-- Google Ads tab -->
   <div class="tab-panel" id="tab-gads">
-    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
-  </div>
-
-  <!-- 年齡性別 tab -->
-  <div class="tab-panel" id="tab-demo">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -541,7 +535,7 @@ function renderAdTable(data) {
 }
 
 function renderDemographic(ageData, genderData) {
-  const el = document.getElementById('tab-demo');
+  const el = document.getElementById('tab-perf');
   const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6','#f59e0b','#aaa'];
 
   function buildSectionHTML(rows, labelKey, labelMap, pieId, barId) {
@@ -623,12 +617,9 @@ function renderDemographic(ageData, genderData) {
     return (ai===-1?99:ai) - (bi===-1?99:bi);
   });
 
-  if (!ageSorted.length && !genderSorted.length) {
-    el.innerHTML = '<div style="text-align:center;padding:60px;color:#aaa;">無資料</div>';
-    return;
-  }
+  if (!ageSorted.length && !genderSorted.length) return;
 
-  el.innerHTML = `<div style="padding:20px">
+  el.insertAdjacentHTML('beforeend', `<div style="padding:0 0 20px">
     <div class="table-card" style="margin-bottom:20px">
       <div class="table-header"><h3>年齡分析</h3></div>
       ${buildSectionHTML(ageSorted, 'age', null, 'agePieChart', 'ageBarChart')}
@@ -637,7 +628,7 @@ function renderDemographic(ageData, genderData) {
       <div class="table-header"><h3>性別分析</h3></div>
       ${buildSectionHTML(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
     </div>
-  </div>`;
+  </div>`);
 
   buildCharts(ageSorted, 'age', null, 'agePieChart', 'ageBarChart');
   buildCharts(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart');
