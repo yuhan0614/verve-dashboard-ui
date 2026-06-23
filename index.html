@@ -750,14 +750,14 @@ function gadsTable(rows, cols) {
   </table></div>`;
 }
 
+let gadsTrendChart = null, gadsPieChart = null;
+
 function renderGoogleAds(data, since, until) {
   gadsData = data;
   const el = document.getElementById('tab-gads');
 
-  // 每日資料 → 每日一列（不聚合）
   const daily = filterByDate(data.daily, since, until);
 
-  // 其他 → filter + 聚合
   function buildAgg(rows, dimKeys) {
     return aggRows(filterByDate(rows, since, until), dimKeys).map(r => {
       const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
@@ -773,7 +773,6 @@ function renderGoogleAds(data, since, until) {
   const agRows     = buildAgg(data.adgroup,  ['廣告活動','廣告群組']);
   const kwRows     = buildAgg(data.keyword,  ['廣告群組','關鍵字','比對類型']);
 
-  const dimCols = (dimLabels) => dimLabels.map(l => ({ label:l, key:l }));
   const metricCols = [
     { label:'花費', key:'spend' },
     { label:'曝光', key:'imp', fmt:'N' },
@@ -785,63 +784,171 @@ function renderGoogleAds(data, since, until) {
     { label:'ROAS', key:'roas', fmt:'R' },
   ];
 
-  // 每日表格
+  // 每日 rows for trend chart
   const dailyRows = daily.map(r => ({
-    日期: r['日期'], spend: parseFloat(r['花費(TWD)'])||0,
-    imp: parseInt(r['曝光'])||0, clk: parseInt(r['點擊'])||0,
+    date: r['日期'],
+    spend: parseFloat(r['花費(TWD)'])||0,
+    imp: parseInt(r['曝光'])||0,
+    clk: parseInt(r['點擊'])||0,
     ctr: parseFloat(r['CTR(%)'])||0,
     cpc: parseFloat(r['CPC(TWD)'])||0,
     purchase: parseFloat(r['購買'])||0,
     revenue: parseFloat(r['營收(TWD)'])||0,
     cpa: parseFloat(r['CPA(TWD)'])||0,
     roas: parseFloat(r['ROAS'])||0,
-  }));
+  })).sort((a,b) => a.date > b.date ? 1 : -1);
 
-  const dailyCols = [
-    { label:'日期', key:'日期' },
-    { label:'花費', key:'spend' },
-    { label:'曝光', key:'imp', fmt:'N' },
-    { label:'點擊', key:'clk', fmt:'N' },
-    { label:'CTR', key:'ctr', fmt:'P' },
-    { label:'CPC', key:'cpc', fmt:'M' },
-    { label:'購買', key:'purchase', fmt:'N' },
-    { label:'營收', key:'revenue', fmt:'M' },
-    { label:'CPA', key:'cpa', fmt:'M' },
-    { label:'ROAS', key:'roas', fmt:'R' },
-  ];
+  // 總計
+  const total = dailyRows.reduce((a,r) => ({
+    spend: a.spend+r.spend, imp: a.imp+r.imp, clk: a.clk+r.clk,
+    purchase: a.purchase+r.purchase, revenue: a.revenue+r.revenue,
+  }), {spend:0,imp:0,clk:0,purchase:0,revenue:0});
+  const totalCtr  = total.imp > 0 ? total.clk/total.imp*100 : 0;
+  const totalCpa  = total.purchase > 0 ? total.spend/total.purchase : 0;
+  const totalRoas = total.spend > 0 ? total.revenue/total.spend : 0;
+  const totalCpc  = total.clk > 0 ? total.spend/total.clk : 0;
+
+  const agSorted = [...agRows].sort((a,b) => b.spend-a.spend);
+  const maxAgSpend = agSorted[0]?.spend || 1;
+
+  const gadsColors = ['#4285f4','#34a853','#fbbc04','#ea4335','#9c27b0','#00bcd4','#ff9800','#795548'];
 
   el.innerHTML = `
-  <div style="background:white;border-bottom:1px solid #f0f2f5;">
-    <div class="sub-tabs">
-      <button class="sub-tab-btn active" onclick="switchGadsTab('daily')">每日趨勢</button>
-      <button class="sub-tab-btn" onclick="switchGadsTab('age')">年齡</button>
-      <button class="sub-tab-btn" onclick="switchGadsTab('gender')">性別</button>
-      <button class="sub-tab-btn" onclick="switchGadsTab('location')">位置</button>
-      <button class="sub-tab-btn" onclick="switchGadsTab('adgroup')">廣告群組</button>
-      <button class="sub-tab-btn" onclick="switchGadsTab('keyword')">關鍵字</button>
-      <span class="gads-badge">Google Ads</span>
+    <div class="summary-grid">
+      <div class="sc c-blue"><div class="lbl">花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc"><div class="lbl">曝光</div><div class="val">${(total.imp/10000).toFixed(1)}萬</div><div class="sub">${total.imp.toLocaleString()}</div></div>
+      <div class="sc c-purple"><div class="lbl">點擊</div><div class="val">${total.clk.toLocaleString()}</div><div class="sub">Clicks</div></div>
+      <div class="sc c-orange"><div class="lbl">CTR</div><div class="val">${totalCtr.toFixed(2)}%</div><div class="sub">點擊率</div></div>
+      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">Conversions</div></div>
+      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">Revenue</div></div>
+      <div class="sc c-green"><div class="lbl">ROAS</div><div class="val">${totalRoas.toFixed(2)}x</div><div class="sub">營收 / 花費</div></div>
+      <div class="sc"><div class="lbl">CPA（購買）</div><div class="val">${fmtM(totalCpa)}</div><div class="sub">Cost per Purchase</div></div>
     </div>
-  </div>
-  <div style="padding:20px">
-    <div class="sub-tab-panel active" id="gads-daily">
-      <div class="table-card">${gadsTable(dailyRows, dailyCols)}</div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>📅 每日趨勢</h3>
+        <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;">
+          <span><span style="display:inline-block;width:12px;height:3px;background:#4285f4;border-radius:2px;vertical-align:middle;margin-right:4px"></span>花費</span>
+          <span><span style="display:inline-block;width:12px;height:3px;background:#e8833a;border-radius:2px;vertical-align:middle;margin-right:4px"></span>ROAS</span>
+          <span><span style="display:inline-block;width:12px;height:3px;background:#34a853;border-radius:2px;vertical-align:middle;margin-right:4px"></span>購買</span>
+        </div>
+        <div class="chart-wrap"><canvas id="gadsTrendChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>📊 廣告群組花費佔比</h3>
+        <div class="chart-wrap"><canvas id="gadsPieChart"></canvas></div>
+      </div>
     </div>
-    <div class="sub-tab-panel" id="gads-age">
-      <div class="table-card">${gadsTable(ageRows, [...dimCols(['年齡層']), ...metricCols])}</div>
+    <div class="table-card">
+      <div class="table-header">
+        <h3>🎯 廣告群組成效</h3>
+        <span style="font-size:12px;color:#aaa;">${agSorted.length} 個廣告群組</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>廣告群組</th><th>花費</th><th>佔比</th><th>曝光</th><th>點擊</th><th>CTR</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
+        </tr></thead>
+        <tbody>${agSorted.map((r,i) => {
+          const pct = total.spend > 0 ? (r.spend/total.spend*100).toFixed(1) : '0';
+          const bw = Math.round(r.spend/maxAgSpend*80);
+          return `<tr>
+            <td><span class="cell-name" title="${r['廣告群組']}">${r['廣告群組']||'—'}</span></td>
+            <td>${fmtM(r.spend)}</td>
+            <td><div class="spend-bar-wrap"><span style="font-size:11px;color:#888">${pct}%</span><div class="spend-bar" style="width:${bw}px;background:${gadsColors[i%gadsColors.length]}"></div></div></td>
+            <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr)}</td>
+            <td>${fmtN(r.purchase)}</td><td>${fmtM(r.revenue)}</td>
+            <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+            <td>${r.cpa?fmtM(r.cpa):'<span class="na">—</span>'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
     </div>
-    <div class="sub-tab-panel" id="gads-gender">
-      <div class="table-card">${gadsTable(genderRows, [...dimCols(['性別']), ...metricCols])}</div>
+    <div class="table-card" style="margin-top:20px">
+      <div class="table-header"><h3>🔑 關鍵字成效</h3><span style="font-size:12px;color:#aaa;">${kwRows.length} 組關鍵字</span></div>
+      ${gadsTable(kwRows, [{label:'廣告群組',key:'廣告群組'},{label:'關鍵字',key:'關鍵字'},{label:'比對類型',key:'比對類型'},...metricCols])}
     </div>
-    <div class="sub-tab-panel" id="gads-location">
-      <div class="table-card">${gadsTable(locRows, [...dimCols(['城市']), ...metricCols])}</div>
-    </div>
-    <div class="sub-tab-panel" id="gads-adgroup">
-      <div class="table-card">${gadsTable(agRows, [...dimCols(['廣告活動','廣告群組']), ...metricCols])}</div>
-    </div>
-    <div class="sub-tab-panel" id="gads-keyword">
-      <div class="table-card">${gadsTable(kwRows, [...dimCols(['廣告群組','關鍵字','比對類型']), ...metricCols])}</div>
-    </div>
-  </div>`;
+    <div class="table-card" style="margin-top:20px">
+      <div class="table-header"><h3>📍 位置成效</h3></div>
+      ${gadsTable(locRows, [{label:'城市',key:'城市'},...metricCols])}
+    </div>`;
+
+  // 趨勢圖
+  if (gadsTrendChart) gadsTrendChart.destroy();
+  gadsTrendChart = new Chart(document.getElementById('gadsTrendChart'), {
+    data: { labels: dailyRows.map(r=>r.date), datasets: [
+      { type:'bar',  label:'花費',  data: dailyRows.map(r=>r.spend),    backgroundColor:'rgba(66,133,244,0.3)', borderColor:'#4285f4', borderWidth:1, yAxisID:'y', borderRadius:3 },
+      { type:'line', label:'ROAS',  data: dailyRows.map(r=>r.roas),     borderColor:'#e8833a', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y2' },
+      { type:'line', label:'購買',  data: dailyRows.map(r=>r.purchase), borderColor:'#34a853', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y3' },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false}, plugins:{legend:{display:false}},
+      scales: {
+        x:  { grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:10} },
+        y:  { position:'left',  beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
+        y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{callback:v=>v+'x',font:{size:10}} },
+        y3: { display:false, beginAtZero:true },
+      }
+    }
+  });
+
+  // 廣告群組圓餅圖
+  if (gadsPieChart) gadsPieChart.destroy();
+  gadsPieChart = new Chart(document.getElementById('gadsPieChart'), {
+    type:'doughnut',
+    data: { labels: agSorted.map(r=>r['廣告群組']||'—'), datasets:[{ data:agSorted.map(r=>r.spend), backgroundColor:gadsColors, borderWidth:2, borderColor:'white' }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ font:{size:10}, boxWidth:10, padding:6 } } } }
+  });
+
+  // 年齡分析（donut + bar + table）
+  if (ageRows.length) {
+    const ageColors = PIE_COLORS.slice(0, ageRows.length);
+    const ageTotalSpend = ageRows.reduce((s,r)=>s+r.spend, 0);
+    el.insertAdjacentHTML('beforeend', `
+      <div class="table-card" style="margin-top:20px">
+        <div class="table-header"><h3>👥 年齡分析</h3></div>
+        <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
+          <div style="width:280px;flex-shrink:0"><canvas id="gadsAgePieChart"></canvas></div>
+          <div style="flex:1;min-width:0"><canvas id="gadsAgeBarChart"></canvas></div>
+        </div>
+        ${gadsTable(ageRows, [{label:'年齡層',key:'年齡層'},...metricCols])}
+      </div>`);
+    new Chart(document.getElementById('gadsAgePieChart'), {
+      type:'doughnut', data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[{data:ageRows.map(r=>r.spend), backgroundColor:ageColors, borderWidth:2, borderColor:'#fff'}] },
+      options:{ cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（年齡）',font:{size:13,weight:'bold'},padding:{bottom:12}}, legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8,generateLabels:chart=>{const ds=chart.data.datasets[0];return chart.data.labels.map((lbl,i)=>({text:`${lbl} ${ageTotalSpend?(ds.data[i]/ageTotalSpend*100).toFixed(1):'0'}%`,fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],index:i}))}}} } }
+    });
+    new Chart(document.getElementById('gadsAgeBarChart'), {
+      data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[
+        {type:'bar',label:'花費',data:ageRows.map(r=>r.spend),backgroundColor:ageColors.map(c=>c+'88'),borderColor:ageColors,borderWidth:1,yAxisID:'y',borderRadius:4},
+        {type:'line',label:'ROAS',data:ageRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
+      ]},
+      options:{ plugins:{title:{display:true,text:'花費 / ROAS（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
+    });
+  }
+
+  // 性別分析（donut + bar + table）
+  if (genderRows.length) {
+    const gColors = genderRows.map(r=>r['性別']==='女性'?'#f74f7e':r['性別']==='男性'?'#4285f4':'#aaa');
+    const gTotalSpend = genderRows.reduce((s,r)=>s+r.spend, 0);
+    el.insertAdjacentHTML('beforeend', `
+      <div class="table-card" style="margin-top:20px">
+        <div class="table-header"><h3>⚧ 性別分析</h3></div>
+        <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
+          <div style="width:280px;flex-shrink:0"><canvas id="gadsGenderPieChart"></canvas></div>
+          <div style="flex:1;min-width:0"><canvas id="gadsGenderBarChart"></canvas></div>
+        </div>
+        ${gadsTable(genderRows, [{label:'性別',key:'性別'},...metricCols])}
+      </div>`);
+    new Chart(document.getElementById('gadsGenderPieChart'), {
+      type:'doughnut', data:{ labels:genderRows.map(r=>r['性別']), datasets:[{data:genderRows.map(r=>r.spend), backgroundColor:gColors, borderWidth:2, borderColor:'#fff'}] },
+      options:{ cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（性別）',font:{size:13,weight:'bold'},padding:{bottom:12}}, legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8,generateLabels:chart=>{const ds=chart.data.datasets[0];return chart.data.labels.map((lbl,i)=>({text:`${lbl} ${gTotalSpend?(ds.data[i]/gTotalSpend*100).toFixed(1):'0'}%`,fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],index:i}))}}} } }
+    });
+    new Chart(document.getElementById('gadsGenderBarChart'), {
+      data:{ labels:genderRows.map(r=>r['性別']), datasets:[
+        {type:'bar',label:'花費',data:genderRows.map(r=>r.spend),backgroundColor:gColors.map(c=>c+'88'),borderColor:gColors,borderWidth:1,yAxisID:'y',borderRadius:4},
+        {type:'line',label:'ROAS',data:genderRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
+      ]},
+      options:{ plugins:{title:{display:true,text:'花費 / ROAS（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
+    });
+  }
 }
 
 fetchData();
