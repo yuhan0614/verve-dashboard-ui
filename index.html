@@ -108,6 +108,15 @@
   th:first-child { background: #f7f8fa; z-index: 3; }
   td:first-child { background: white; }
   tr:hover td:first-child { background: #f6ffed; }
+
+  /* Google Ads sub-tabs */
+  .sub-tabs { display: flex; gap: 6px; padding: 16px 20px 0; border-bottom: 1px solid #f0f2f5; flex-wrap: wrap; }
+  .sub-tab-btn { padding: 7px 16px; font-size: 13px; font-weight: 500; color: #888; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .sub-tab-btn:hover { color: #1677ff; }
+  .sub-tab-btn.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: 600; }
+  .sub-tab-panel { display: none; }
+  .sub-tab-panel.active { display: block; }
+  .gads-badge { background: #e6f4ff; color: #1677ff; border-radius: 4px; font-size: 11px; padding: 2px 6px; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -151,6 +160,7 @@
   <button class="tab-btn active" onclick="switchTab('perf')">📊 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 素材</button>
   <button class="tab-btn" onclick="switchTab('demo')">👥 年齡性別</button>
+  <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -161,6 +171,11 @@
 <div class="main">
   <!-- 成效 tab -->
   <div class="tab-panel active" id="tab-perf">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
+  <!-- Google Ads tab -->
+  <div class="tab-panel" id="tab-gads">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -182,6 +197,16 @@ let trendChart, pieChart;
 let allAdData = [];
 let adUrlMap = {};
 let sortKey = '', sortDir = -1;
+
+const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
+const GADS_CSV = {
+  daily:    `${GADS_PUB}?gid=1644261807&single=true&output=csv`,
+  age:      `${GADS_PUB}?gid=1627764612&single=true&output=csv`,
+  gender:   `${GADS_PUB}?gid=1613742604&single=true&output=csv`,
+  location: `${GADS_PUB}?gid=1732071302&single=true&output=csv`,
+  adgroup:  `${GADS_PUB}?gid=363487600&single=true&output=csv`,
+  keyword:  `${GADS_PUB}?gid=355190306&single=true&output=csv`,
+};
 
 // ── Date ──────────────────────────────────────────────────
 function toYMD(d) {
@@ -242,13 +267,20 @@ async function fetchData(forceRefresh = false) {
   const force = forceRefresh;
 
   try {
-    const [campRes, trendRes, adRes, urlRes, ageRes, genderRes] = await Promise.all([
+    const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
+           gDailyRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/ad_urls?account=${ACCOUNT_ID}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=age`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=gender`),
+      fetch(GADS_CSV.daily),
+      fetch(GADS_CSV.age),
+      fetch(GADS_CSV.gender),
+      fetch(GADS_CSV.location),
+      fetch(GADS_CSV.adgroup),
+      fetch(GADS_CSV.keyword),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
@@ -260,9 +292,17 @@ async function fetchData(forceRefresh = false) {
     allAdData       = adJson.data || [];
     adUrlMap        = (await urlRes.json()).data || {};
 
+    const gDaily  = parseCSV(await gDailyRes.text());
+    const gAge    = parseCSV(await gAgeRes.text());
+    const gGender = parseCSV(await gGenderRes.text());
+    const gLoc    = parseCSV(await gLocRes.text());
+    const gAg     = parseCSV(await gAgRes.text());
+    const gKw     = parseCSV(await gKwRes.text());
+
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
+    renderGoogleAds({ daily: gDaily, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until);
     const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
     const isCached  = campJson.cached;
     document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
@@ -598,6 +638,173 @@ function renderDemographic(ageData, genderData) {
     <div class="table-card">
       <div class="table-header"><h3>性別分析</h3></div>
       ${buildSection(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
+    </div>
+  </div>`;
+}
+
+// ── CSV parser ────────────────────────────────────────────────
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  return lines.slice(1).map(line => {
+    const vals = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    vals.push(cur.trim());
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i]||'').replace(/^"|"$/g,''));
+    return obj;
+  });
+}
+
+// ── Google Ads ─────────────────────────────────────────────────
+let gadsData = {};
+
+function switchGadsTab(name) {
+  document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.sub-tab-panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('gads-' + name).classList.add('active');
+}
+
+function filterByDate(rows, since, until) {
+  return rows.filter(r => {
+    const d = r['日期'] || r['date'] || '';
+    return d >= since && d <= until;
+  });
+}
+
+function aggRows(rows, dimKeys) {
+  const map = {};
+  rows.forEach(r => {
+    const key = dimKeys.map(k => r[k]||'').join('||');
+    if (!map[key]) {
+      map[key] = { _keys: {}, spend:0, imp:0, clk:0, purchase:0, revenue:0 };
+      dimKeys.forEach(k => map[key]._keys[k] = r[k]||'');
+    }
+    map[key].spend    += parseFloat(r['花費(TWD)'])||0;
+    map[key].imp      += parseInt(r['曝光'])||0;
+    map[key].clk      += parseInt(r['點擊'])||0;
+    map[key].purchase += parseFloat(r['購買'])||0;
+    map[key].revenue  += parseFloat(r['營收(TWD)'])||0;
+  });
+  return Object.values(map).sort((a,b) => b.spend - a.spend);
+}
+
+function gadsTable(rows, cols) {
+  if (!rows.length) return '<div style="padding:20px;color:#aaa">無資料</div>';
+  const maxSpend = Math.max(...rows.map(r=>r.spend||0), 1);
+  return `<div class="table-wrap"><table>
+    <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>{
+      const bw = Math.round((r.spend||0)/maxSpend*60);
+      return `<tr>${cols.map(c => {
+        if (c.key === 'spend') return `<td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>`;
+        if (c.fmt === 'M') return `<td>${fmtM(r[c.key]||0)}</td>`;
+        if (c.fmt === 'N') return `<td>${fmtN(r[c.key]||0)}</td>`;
+        if (c.fmt === 'P') return `<td>${fmtP(r[c.key]||0)}</td>`;
+        if (c.fmt === 'R') return `<td class="${rc(r[c.key]||0)}">${(r[c.key]||0)?((+r[c.key]).toFixed(2)+'x'):'<span class="na">—</span>'}</td>`;
+        return `<td>${r[c.key]||'—'}</td>`;
+      }).join('')}</tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function renderGoogleAds(data, since, until) {
+  gadsData = data;
+  const el = document.getElementById('tab-gads');
+
+  // 每日資料 → 每日一列（不聚合）
+  const daily = filterByDate(data.daily, since, until);
+
+  // 其他 → filter + 聚合
+  function buildAgg(rows, dimKeys) {
+    return aggRows(filterByDate(rows, since, until), dimKeys).map(r => {
+      const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
+      const cpa  = r.purchase > 0 ? r.spend/r.purchase : 0;
+      const roas = r.spend > 0 ? r.revenue/r.spend : 0;
+      return { ...r._keys, spend:r.spend, imp:r.imp, clk:r.clk, ctr, purchase:r.purchase, revenue:r.revenue, cpa, roas };
+    });
+  }
+
+  const ageRows    = buildAgg(data.age,      ['年齡層']);
+  const genderRows = buildAgg(data.gender,   ['性別']);
+  const locRows    = buildAgg(data.location, ['城市']);
+  const agRows     = buildAgg(data.adgroup,  ['廣告活動','廣告群組']);
+  const kwRows     = buildAgg(data.keyword,  ['廣告群組','關鍵字','比對類型']);
+
+  const dimCols = (dimLabels) => dimLabels.map(l => ({ label:l, key:l }));
+  const metricCols = [
+    { label:'花費', key:'spend' },
+    { label:'曝光', key:'imp', fmt:'N' },
+    { label:'點擊', key:'clk', fmt:'N' },
+    { label:'CTR', key:'ctr', fmt:'P' },
+    { label:'購買', key:'purchase', fmt:'N' },
+    { label:'營收', key:'revenue', fmt:'M' },
+    { label:'CPA', key:'cpa', fmt:'M' },
+    { label:'ROAS', key:'roas', fmt:'R' },
+  ];
+
+  // 每日表格
+  const dailyRows = daily.map(r => ({
+    日期: r['日期'], spend: parseFloat(r['花費(TWD)'])||0,
+    imp: parseInt(r['曝光'])||0, clk: parseInt(r['點擊'])||0,
+    ctr: parseFloat(r['CTR(%)'])||0,
+    cpc: parseFloat(r['CPC(TWD)'])||0,
+    purchase: parseFloat(r['購買'])||0,
+    revenue: parseFloat(r['營收(TWD)'])||0,
+    cpa: parseFloat(r['CPA(TWD)'])||0,
+    roas: parseFloat(r['ROAS'])||0,
+  }));
+
+  const dailyCols = [
+    { label:'日期', key:'日期' },
+    { label:'花費', key:'spend' },
+    { label:'曝光', key:'imp', fmt:'N' },
+    { label:'點擊', key:'clk', fmt:'N' },
+    { label:'CTR', key:'ctr', fmt:'P' },
+    { label:'CPC', key:'cpc', fmt:'M' },
+    { label:'購買', key:'purchase', fmt:'N' },
+    { label:'營收', key:'revenue', fmt:'M' },
+    { label:'CPA', key:'cpa', fmt:'M' },
+    { label:'ROAS', key:'roas', fmt:'R' },
+  ];
+
+  el.innerHTML = `
+  <div style="background:white;border-bottom:1px solid #f0f2f5;">
+    <div class="sub-tabs">
+      <button class="sub-tab-btn active" onclick="switchGadsTab('daily')">每日趨勢</button>
+      <button class="sub-tab-btn" onclick="switchGadsTab('age')">年齡</button>
+      <button class="sub-tab-btn" onclick="switchGadsTab('gender')">性別</button>
+      <button class="sub-tab-btn" onclick="switchGadsTab('location')">位置</button>
+      <button class="sub-tab-btn" onclick="switchGadsTab('adgroup')">廣告群組</button>
+      <button class="sub-tab-btn" onclick="switchGadsTab('keyword')">關鍵字</button>
+      <span class="gads-badge">Google Ads</span>
+    </div>
+  </div>
+  <div style="padding:20px">
+    <div class="sub-tab-panel active" id="gads-daily">
+      <div class="table-card">${gadsTable(dailyRows, dailyCols)}</div>
+    </div>
+    <div class="sub-tab-panel" id="gads-age">
+      <div class="table-card">${gadsTable(ageRows, [...dimCols(['年齡層']), ...metricCols])}</div>
+    </div>
+    <div class="sub-tab-panel" id="gads-gender">
+      <div class="table-card">${gadsTable(genderRows, [...dimCols(['性別']), ...metricCols])}</div>
+    </div>
+    <div class="sub-tab-panel" id="gads-location">
+      <div class="table-card">${gadsTable(locRows, [...dimCols(['城市']), ...metricCols])}</div>
+    </div>
+    <div class="sub-tab-panel" id="gads-adgroup">
+      <div class="table-card">${gadsTable(agRows, [...dimCols(['廣告活動','廣告群組']), ...metricCols])}</div>
+    </div>
+    <div class="sub-tab-panel" id="gads-keyword">
+      <div class="table-card">${gadsTable(kwRows, [...dimCols(['廣告群組','關鍵字','比對類型']), ...metricCols])}</div>
     </div>
   </div>`;
 }
