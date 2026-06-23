@@ -503,59 +503,81 @@ function renderAdTable(data) {
 function renderDemographic(ageData, genderData) {
   const el = document.getElementById('tab-demo');
 
-  function buildTable(rows, labelKey, labelMap) {
+  const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6','#f59e0b','#aaa'];
+
+  function buildSection(rows, labelKey, labelMap, pieId, barId) {
     if (!rows.length) return '<p style="color:#aaa;padding:20px">無資料</p>';
-    const totalSpend = rows.reduce((s,r) => s+(+r.spend||0), 0);
+    const labels = rows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
+    const spends = rows.map(r => +r.spend||0);
+    const roases = rows.map(r => +r.roas||0);
+    const colors = labelKey === 'gender'
+      ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
+      : PIE_COLORS.slice(0, rows.length);
+
+    const tableRows = rows.map(r => {
+      const spend = +r.spend||0, pur = +r.purchase||0, roas = +r.roas||0;
+      const cpa = pur ? spend/pur : 0;
+      const label = labelMap?.[r[labelKey]] || r[labelKey] || '—';
+      return `<tr>
+        <td><strong>${label}</strong></td>
+        <td>${fmtM(spend)}</td>
+        <td>${fmtN(+r.impressions||0)}</td>
+        <td>${fmtN(+r.link_clicks||0)}</td>
+        <td>${fmtP(+r.ctr||0)}</td>
+        <td>${r.cplc?fmtM(+r.cplc):'<span class="na">—</span>'}</td>
+        <td>${fmtN(+r.add_to_cart||0)}</td>
+        <td>${fmtN(pur)}</td>
+        <td>${fmtM(+r.purchase_value||0)}</td>
+        <td class="${rc(roas)}">${roas?roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+        <td>${cpa?fmtM(cpa):'<span class="na">—</span>'}</td>
+      </tr>`;
+    }).join('');
+
     return `
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>${labelKey==='age'?'年齡':'性別'}</th>
-          <th>花費佔比</th>
-          <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
-        </tr></thead>
-        <tbody>
-        ${rows.map(r => {
-          const spend  = +r.spend||0;
-          const imp    = +r.impressions||0;
-          const clicks = +r.link_clicks||0;
-          const ctr    = +r.ctr||0;
-          const cplc   = +r.cplc||0;
-          const atc    = +r.add_to_cart||0;
-          const pur    = +r.purchase||0;
-          const pv     = +r.purchase_value||0;
-          const roas   = +r.roas||0;
-          const cpa    = pur ? spend/pur : 0;
-          const pct    = totalSpend ? (spend/totalSpend*100).toFixed(1) : '0';
-          const label  = labelMap?.[r[labelKey]] || r[labelKey] || '—';
-          return `<tr>
-            <td><strong>${label}</strong></td>
-            <td><div style="display:flex;align-items:center;gap:6px"><div style="width:${Math.round(+pct*0.8)}px;height:6px;background:#52c41a;border-radius:3px"></div>${pct}%</div></td>
-            <td>${fmtM(spend)}</td>
-            <td>${fmtN(imp)}</td>
-            <td>${fmtN(clicks)}</td>
-            <td>${fmtP(ctr)}</td>
-            <td>${cplc?fmtM(cplc):'<span class="na">—</span>'}</td>
-            <td>${fmtN(atc)}</td>
-            <td>${fmtN(pur)}</td>
-            <td>${fmtM(pv)}</td>
-            <td class="${rc(roas)}">${roas?roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
-            <td>${cpa?fmtM(cpa):'<span class="na">—</span>'}</td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table>
-    </div>`;
+      <div style="display:flex;gap:16px;padding:16px 20px;align-items:center">
+        <div style="width:200px;flex-shrink:0"><canvas id="${pieId}" height="180"></canvas></div>
+        <div style="flex:1;min-width:0"><canvas id="${barId}" height="120"></canvas></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>${labelKey==='age'?'年齡':'性別'}</th>
+            <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+      <script>
+      new Chart(document.getElementById('${pieId}'), {
+        type:'doughnut',
+        data:{ labels:${JSON.stringify(labels)}, datasets:[{ data:${JSON.stringify(spends)}, backgroundColor:${JSON.stringify(colors)}, borderWidth:2 }] },
+        options:{ plugins:{ legend:{ position:'bottom', labels:{ font:{size:11}, boxWidth:12 } }, title:{ display:true, text:'花費分佈', font:{size:12} } }, cutout:'60%' }
+      });
+      new Chart(document.getElementById('${barId}'), {
+        data:{
+          labels:${JSON.stringify(labels)},
+          datasets:[
+            { type:'bar', label:'花費', data:${JSON.stringify(spends)}, backgroundColor:${JSON.stringify(colors.map(c=>c+'99'))}, borderColor:${JSON.stringify(colors)}, borderWidth:1, yAxisID:'y', borderRadius:3 },
+            { type:'line', label:'ROAS', data:${JSON.stringify(roases)}, borderColor:'#f7954f', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2' }
+          ]
+        },
+        options:{
+          plugins:{ legend:{ position:'top' }, title:{ display:true, text:'花費 / ROAS', font:{size:12} } },
+          scales:{
+            y:{ position:'left', title:{ display:true, text:'花費' } },
+            y2:{ position:'right', title:{ display:true, text:'ROAS' }, grid:{ drawOnChartArea:false } }
+          }
+        }
+      });
+      <\/script>`;
   }
 
-  // 年齡：排序
   const ageOrder = ['13-17','18-24','25-34','35-44','45-54','55-64','65+','Unknown'];
   const ageSorted = [...ageData].filter(r=>r.age).sort((a,b) => {
     const ai = ageOrder.indexOf(a.age), bi = ageOrder.indexOf(b.age);
     return (ai===-1?99:ai) - (bi===-1?99:bi);
   });
 
-  // 性別：排序
   const genderOrder = ['male','female','unknown','男性','女性','不明'];
   const genderMap = { male:'男性', female:'女性', unknown:'不明' };
   const genderSorted = [...genderData].filter(r=>r.gender).sort((a,b) => {
@@ -571,11 +593,11 @@ function renderDemographic(ageData, genderData) {
   el.innerHTML = `<div style="padding:20px">
     <div class="table-card" style="margin-bottom:20px">
       <div class="table-header"><h3>年齡分析</h3></div>
-      ${buildTable(ageSorted, 'age', null)}
+      ${buildSection(ageSorted, 'age', null, 'agePieChart', 'ageBarChart')}
     </div>
     <div class="table-card">
       <div class="table-header"><h3>性別分析</h3></div>
-      ${buildTable(genderSorted, 'gender', genderMap)}
+      ${buildSection(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
     </div>
   </div>`;
 }
