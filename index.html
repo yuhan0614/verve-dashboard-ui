@@ -1284,23 +1284,11 @@ function renderSholine(rows, since, until) {
       revenue:  parseFloat(r['網店成交額']?.replace(/,/g,''))||0,
       orders:   parseInt(r['網店成交-訂單數']?.replace(/,/g,''))||0,
       sessions: parseInt(r['總工作階段數']?.replace(/,/g,''))||0,
+      cvr:      parseFloat(r['轉換率'])||0,
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
-  const total = filtered.reduce((a,r) => ({
-    revenue: a.revenue+r.revenue, orders: a.orders+r.orders, sessions: a.sessions+r.sessions,
-  }), {revenue:0, orders:0, sessions:0});
-  const aov = total.orders > 0 ? total.revenue/total.orders : 0;
-  const cvr = total.sessions > 0 ? total.orders/total.sessions*100 : 0;
-
   document.getElementById('tab-sholine').innerHTML = `
-    <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
-      <div class="sc"><div class="lbl">工作階段</div><div class="val">${total.sessions.toLocaleString()}</div><div class="sub">Sessions</div></div>
-      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
-      <div class="sc c-teal"><div class="lbl">轉換率</div><div class="val">${cvr.toFixed(2)}%</div><div class="sub">成交訂單 / 工作階段</div></div>
-    </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
       <div style="position:relative;height:280px"><canvas id="sholineTrendChart"></canvas></div>
@@ -1313,11 +1301,10 @@ function renderSholine(rows, since, until) {
         </tr></thead>
         <tbody>${filtered.map(r => {
           const aov = r.orders > 0 ? r.revenue/r.orders : 0;
-          const cvr = r.sessions > 0 ? r.orders/r.sessions*100 : 0;
           return `<tr>
             <td>${r.date}</td>
             <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td>
-            <td>${r.sessions.toLocaleString()}</td><td>${cvr.toFixed(2)}%</td>
+            <td>${r.sessions.toLocaleString()}</td><td>${(r.cvr*100).toFixed(2)}%</td>
             <td>${fmtM(aov)}</td>
           </tr>`;
         }).join('')}</tbody>
@@ -1328,7 +1315,7 @@ function renderSholine(rows, since, until) {
   sholineTrendChart = new Chart(document.getElementById('sholineTrendChart'), {
     data: { labels: filtered.map(r=>r.date), datasets: [
       { type:'bar',  label:'成交額', data: filtered.map(r=>r.revenue), backgroundColor:'rgba(82,196,26,0.35)', borderColor:'#52c41a', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
-      { type:'line', label:'轉換率', data: filtered.map(r=>r.sessions>0?r.orders/r.sessions*100:0), borderColor:'#fa8c16', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
+      { type:'line', label:'轉換率', data: filtered.map(r=>r.cvr*100), borderColor:'#fa8c16', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
