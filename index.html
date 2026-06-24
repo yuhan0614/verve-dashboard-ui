@@ -1288,17 +1288,20 @@ function renderSholine(rows, since, until, trendData, gDaily) {
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
-  // 每日廣告花費 (Meta + Google)
-  const metaSpendMap = {};
-  (trendData||[]).forEach(r => { if (r.date_start) metaSpendMap[r.date_start] = (r.spend||0); });
-  const gSpendMap = {};
+  // 每日廣告花費 & 廣告營收 (Meta + Google)
+  const norm2 = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
+  const metaMap = {};
+  (trendData||[]).forEach(r => { if (r.date_start) metaMap[r.date_start] = { spend: r.spend||0, rev: r.purchase_value||0 }; });
+  const gMap = {};
   (gDaily||[]).forEach(r => { if (r['日期']) {
-    const norm2 = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
     const d = r['日期'].includes('-') ? r['日期'] : norm2(r['日期']);
-    gSpendMap[d] = (gSpendMap[d]||0) + (parseFloat(r['花費(TWD)'])||0);
+    if (!gMap[d]) gMap[d] = {spend:0, rev:0};
+    gMap[d].spend += parseFloat(r['花費(TWD)'])||0;
+    gMap[d].rev   += parseFloat(r['營收(TWD)'])||0;
   }});
   filtered.forEach(r => {
-    r.adSpend = (metaSpendMap[r.date]||0) + (gSpendMap[r.date]||0);
+    r.adSpend  = (metaMap[r.date]?.spend||0) + (gMap[r.date]?.spend||0);
+    r.adRev    = (metaMap[r.date]?.rev||0)   + (gMap[r.date]?.rev||0);
     r.siteRoas = r.adSpend > 0 ? r.revenue/r.adSpend : 0;
   });
 
@@ -1344,15 +1347,16 @@ function renderSholine(rows, since, until, trendData, gDaily) {
   if (sholineTrendChart) sholineTrendChart.destroy();
   sholineTrendChart = new Chart(document.getElementById('sholineTrendChart'), {
     data: { labels: filtered.map(r=>r.date), datasets: [
-      { type:'bar',  label:'成交額', data: filtered.map(r=>r.revenue), backgroundColor:'rgba(82,196,26,0.35)', borderColor:'#52c41a', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
-      { type:'line', label:'轉換率', data: filtered.map(r=>r.cvr*100), borderColor:'#fa8c16', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
+      { type:'bar',  label:'成交額',   data: filtered.map(r=>r.revenue), backgroundColor:'rgba(100,210,230,0.6)', borderColor:'#38bcd8', borderWidth:1, borderRadius:3, yAxisID:'y', order:3 },
+      { type:'bar',  label:'廣告營收', data: filtered.map(r=>r.adRev),   backgroundColor:'rgba(110,130,220,0.55)', borderColor:'#6b7fd6', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
+      { type:'line', label:'全站ROAS', data: filtered.map(r=>r.siteRoas), borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
       scales: {
         x:  { grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:14} },
         y:  { position:'left',  beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
-        y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{callback:v=>v.toFixed(1)+'%',font:{size:10}} },
+        y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{callback:v=>v.toFixed(1)+'x',font:{size:10}} },
       }
     }
   });
