@@ -592,15 +592,17 @@ function renderDemographic(ageData, genderData) {
 
   function buildCharts(rows, labelKey, labelMap, pieId, barId) {
     if (!rows.length) return;
-    const labels = rows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
-    const spends = rows.map(r => +r.spend||0);
-    const roases = rows.map(r => +r.roas||0);
+    const EXCLUDE = ['不明', 'unknown', 'Unknown'];
+    const barRows = rows.filter(r => !EXCLUDE.includes(labelMap?.[r[labelKey]] || r[labelKey]));
+    const labels = barRows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
+    const spends = barRows.map(r => +r.spend||0);
+    const roases = barRows.map(r => +r.roas||0);
     const totalSpend = spends.reduce((a,b)=>a+b, 0);
     const dimName = labelKey === 'age' ? '年齡' : '性別';
 
     const pieColors = labelKey === 'gender'
-      ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
-      : PIE_COLORS.slice(0, rows.length);
+      ? barRows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
+      : PIE_COLORS.slice(0, barRows.length);
     const barColor = labelKey === 'gender' ? null : '#a8c8f8';
 
     new Chart(document.getElementById(pieId), {
