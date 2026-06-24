@@ -640,7 +640,7 @@ function renderDemographic(ageData, genderData) {
         return `<div style="display:flex;align-items:center;gap:5px;min-width:0">
           <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${color};flex-shrink:0"></span>
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lbl}</span>
-          <span style="flex-shrink:0;color:#888">${pct}%</span>
+          <span style="min-width:38px;text-align:right;flex-shrink:0;color:#888">${pct}%</span>
         </div>`;
       }).join('');
     }
@@ -946,7 +946,7 @@ function renderGoogleAds(data, since, until) {
     });
     document.getElementById('gadsAgePieChart-legend').innerHTML = ageRows.map((r,i) => {
       const pct = ageTotalSpend ? (r.spend/ageTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['年齡層']}</span><span style="flex-shrink:0;color:#888">${pct}%</span></div>`;
+      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['年齡層']}</span><span style="min-width:38px;text-align:right;flex-shrink:0;color:#888">${pct}%</span></div>`;
     }).join('');
     new Chart(document.getElementById('gadsAgeBarChart'), {
       data:{ labels:ageBarRows.map(r=>r['年齡層']), datasets:[
@@ -978,7 +978,7 @@ function renderGoogleAds(data, since, until) {
     });
     document.getElementById('gadsGenderPieChart-legend').innerHTML = genderRows.map((r,i) => {
       const pct = gTotalSpend ? (r.spend/gTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['性別']}</span><span style="flex-shrink:0;color:#888">${pct}%</span></div>`;
+      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['性別']}</span><span style="min-width:38px;text-align:right;flex-shrink:0;color:#888">${pct}%</span></div>`;
     }).join('');
     new Chart(document.getElementById('gadsGenderBarChart'), {
       data:{ labels:genderRows.map(r=>r['性別']), datasets:[
