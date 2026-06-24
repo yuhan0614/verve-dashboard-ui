@@ -1335,7 +1335,7 @@ function renderSholine(rows, since, until, trendData, gDaily) {
             <td>${r.sessions.toLocaleString()}</td><td>${(r.cvr*100).toFixed(2)}%</td>
             <td>${fmtM(aov)}</td>
             <td>${fmtM(r.adSpend)}</td>
-            <td class="${rc(r.siteRoas)}">${r.siteRoas?r.siteRoas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+            <td style="color:#8B5E3C;font-weight:400">${r.siteRoas?r.siteRoas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
