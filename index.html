@@ -157,7 +157,8 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('perf')">📊 Meta 成效</button>
+  <button class="tab-btn active" onclick="switchTab('overall')">🌐 媒體總成效</button>
+  <button class="tab-btn" onclick="switchTab('perf')">📊 Meta 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
   <button class="tab-btn" onclick="switchTab('gkw')">🔑 Google 關鍵字</button>
@@ -169,8 +170,13 @@
 </div>
 
 <div class="main">
+  <!-- 媒體總成效 tab -->
+  <div class="tab-panel active" id="tab-overall">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
   <!-- 成效 tab -->
-  <div class="tab-panel active" id="tab-perf">
+  <div class="tab-panel" id="tab-perf">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -194,6 +200,7 @@
 const API_BASE = 'https://verve-dashboard.onrender.com';
 const ACCOUNT_ID = '1417409513448597';
 let trendChart, pieChart;
+let overallSpendChart = null, overallPieChart = null;
 let allAdData = [];
 let adUrlMap = {};
 let sortKey = '', sortDir = -1;
@@ -302,6 +309,7 @@ async function fetchData(forceRefresh = false) {
     const gAg     = parseCSV(await gAgRes.text());
     const gKw     = parseCSV(await gKwRes.text());
 
+    renderOverall(trendData, gDaily, since, until);
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
@@ -768,6 +776,124 @@ function gadsTable(rows, cols) {
       }).join('')}</tr>`;
     }).join('')}</tbody>
   </table></div>`;
+}
+
+// ── 媒體總成效 Tab ─────────────────────────────────────────
+function renderOverall(trendData, gDaily, since, until) {
+  const el = document.getElementById('tab-overall');
+
+  // Meta daily totals
+  const metaDays = trendData.filter(r => r.date_start >= since && r.date_start <= until);
+  const meta = metaDays.reduce((a,r) => ({
+    spend: a.spend+(r.spend||0), imp: a.imp+(r.impressions||0),
+    clk: a.clk+(r.link_clicks||0), purchase: a.purchase+(r.purchase||0),
+    revenue: a.revenue+(r.purchase_value||0),
+  }), {spend:0,imp:0,clk:0,purchase:0,revenue:0});
+  meta.roas = meta.spend > 0 ? meta.revenue/meta.spend : 0;
+  meta.cpa  = meta.purchase > 0 ? meta.spend/meta.purchase : 0;
+  meta.ctr  = meta.imp > 0 ? meta.clk/meta.imp*100 : 0;
+
+  // Google daily totals
+  const gDays = filterByDate(gDaily, since, until);
+  const gads = gDays.reduce((a,r) => ({
+    spend: a.spend+(parseFloat(r['花費(TWD)'])||0), imp: a.imp+(parseInt(r['曝光'])||0),
+    clk: a.clk+(parseInt(r['點擊'])||0), purchase: a.purchase+(parseFloat(r['購買'])||0),
+    revenue: a.revenue+(parseFloat(r['營收(TWD)'])||0),
+  }), {spend:0,imp:0,clk:0,purchase:0,revenue:0});
+  gads.roas = gads.spend > 0 ? gads.revenue/gads.spend : 0;
+  gads.cpa  = gads.purchase > 0 ? gads.spend/gads.purchase : 0;
+  gads.ctr  = gads.imp > 0 ? gads.clk/gads.imp*100 : 0;
+
+  // Combined
+  const total = {
+    spend: meta.spend + gads.spend, imp: meta.imp + gads.imp,
+    clk: meta.clk + gads.clk, purchase: meta.purchase + gads.purchase,
+    revenue: meta.revenue + gads.revenue,
+  };
+  total.roas = total.spend > 0 ? total.revenue/total.spend : 0;
+  total.cpa  = total.purchase > 0 ? total.spend/total.purchase : 0;
+
+  // Trend: align dates
+  const metaByDate = {};
+  metaDays.forEach(r => { metaByDate[r.date_start] = r.spend||0; });
+  const gByDate = {};
+  gDays.forEach(r => { gByDate[r['日期']] = parseFloat(r['花費(TWD)'])||0; });
+  const allDates = [...new Set([...Object.keys(metaByDate), ...Object.keys(gByDate)])].sort();
+
+  el.innerHTML = `
+    <div class="summary-grid">
+      <div class="sc c-blue"><div class="lbl">合計花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc" style="background:#fff7e6"><div class="lbl">Meta 花費</div><div class="val" style="color:#1877f2">${fmtM(meta.spend)}</div><div class="sub">${total.spend>0?(meta.spend/total.spend*100).toFixed(1)+'%':''}</div></div>
+      <div class="sc" style="background:#f0f9ff"><div class="lbl">Google 花費</div><div class="val" style="color:#34a853">${fmtM(gads.spend)}</div><div class="sub">${total.spend>0?(gads.spend/total.spend*100).toFixed(1)+'%':''}</div></div>
+      <div class="sc c-teal"><div class="lbl">合計購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">Conversions</div></div>
+      <div class="sc c-pink"><div class="lbl">合計營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">Revenue</div></div>
+      <div class="sc c-green"><div class="lbl">合計 ROAS</div><div class="val">${total.roas.toFixed(2)}x</div><div class="sub">營收 / 花費</div></div>
+      <div class="sc"><div class="lbl">合計 CPA</div><div class="val">${fmtM(total.cpa)}</div><div class="sub">Cost per Purchase</div></div>
+    </div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>📅 每日花費趨勢（Meta vs Google）</h3>
+        <div style="position:relative;height:260px"><canvas id="overallSpendChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>💰 花費佔比（媒體）</h3>
+        <div style="position:relative;height:260px"><canvas id="overallPieChart"></canvas></div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header"><h3>📊 媒體比較</h3></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>媒體</th><th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th>
+          <th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><strong style="color:#1877f2">Meta</strong></td>
+            <td>${fmtM(meta.spend)}</td><td>${fmtN(meta.imp)}</td><td>${fmtN(meta.clk)}</td>
+            <td>${fmtP(meta.ctr)}</td><td>${fmtN(meta.purchase,0)}</td><td>${fmtM(meta.revenue)}</td>
+            <td class="${rc(meta.roas)}">${meta.roas.toFixed(2)}x</td><td>${fmtM(meta.cpa)}</td>
+          </tr>
+          <tr>
+            <td><strong style="color:#34a853">Google</strong></td>
+            <td>${fmtM(gads.spend)}</td><td>${fmtN(gads.imp)}</td><td>${fmtN(gads.clk)}</td>
+            <td>${fmtP(gads.ctr)}</td><td>${fmtN(gads.purchase,0)}</td><td>${fmtM(gads.revenue)}</td>
+            <td class="${rc(gads.roas)}">${gads.roas.toFixed(2)}x</td><td>${fmtM(gads.cpa)}</td>
+          </tr>
+          <tr style="background:#f9fafb;font-weight:600">
+            <td>合計</td>
+            <td>${fmtM(total.spend)}</td><td>${fmtN(total.imp)}</td><td>${fmtN(total.clk)}</td>
+            <td>${fmtP(total.imp>0?total.clk/total.imp*100:0)}</td><td>${fmtN(total.purchase,0)}</td><td>${fmtM(total.revenue)}</td>
+            <td class="${rc(total.roas)}">${total.roas.toFixed(2)}x</td><td>${fmtM(total.cpa)}</td>
+          </tr>
+        </tbody>
+      </table></div>
+    </div>`;
+
+  if (overallSpendChart) overallSpendChart.destroy();
+  overallSpendChart = new Chart(document.getElementById('overallSpendChart'), {
+    data: { labels: allDates, datasets: [
+      { type:'bar', label:'Meta 花費', data: allDates.map(d=>metaByDate[d]||0), backgroundColor:'rgba(24,119,242,0.5)', borderColor:'#1877f2', borderWidth:1, borderRadius:3 },
+      { type:'bar', label:'Google 花費', data: allDates.map(d=>gByDate[d]||0), backgroundColor:'rgba(52,168,83,0.5)', borderColor:'#34a853', borderWidth:1, borderRadius:3 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
+      scales: {
+        x: { stacked:false, grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:12} },
+        y: { beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
+      }
+    }
+  });
+
+  if (overallPieChart) overallPieChart.destroy();
+  overallPieChart = new Chart(document.getElementById('overallPieChart'), {
+    type:'doughnut',
+    data: { labels:['Meta','Google'], datasets:[{ data:[meta.spend, gads.spend], backgroundColor:['#1877f2','#34a853'], borderWidth:2, borderColor:'#fff' }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{ legend:{position:'right',labels:{font:{size:12},boxWidth:12,padding:12}},
+        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtM(ctx.parsed)} (${total.spend?(ctx.parsed/total.spend*100).toFixed(1):0}%)`}} }
+    }
+  });
 }
 
 let gadsTrendChart = null, gadsPieChart = null;
