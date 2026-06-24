@@ -578,8 +578,8 @@ function renderDemographic(ageData, genderData) {
     }).join('');
     return `
       <div style="display:flex;gap:24px;padding:20px;align-items:center">
-        <div style="flex:2;min-width:0;max-height:80px"><canvas id="${pieId}" height="80"></canvas></div>
-        <div style="flex:3;min-width:0"><canvas id="${barId}" height="80"></canvas></div>
+        <div style="flex:2;min-width:0;height:160px;position:relative"><canvas id="${pieId}" style="position:absolute;top:0;left:0;width:100%!important;height:100%!important"></canvas></div>
+        <div style="flex:3;min-width:0;height:160px;position:relative"><canvas id="${barId}" style="position:absolute;top:0;left:0;width:100%!important;height:100%!important"></canvas></div>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
@@ -607,6 +607,7 @@ function renderDemographic(ageData, genderData) {
       type: 'doughnut',
       data: { labels, datasets: [{ data: spends, backgroundColor: pieColors, borderWidth: 2, borderColor: '#fff' }] },
       options: {
+        responsive: true, maintainAspectRatio: false,
         cutout: '60%',
         plugins: {
           title: { display: true, text: `花費分佈（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 12 } },
@@ -653,6 +654,7 @@ function renderDemographic(ageData, genderData) {
         ]
       },
       options: {
+        responsive: true, maintainAspectRatio: false,
         plugins: {
           title: { display: true, text: `花費 / ROAS（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 8 } },
           legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 14, padding: 12 } }
