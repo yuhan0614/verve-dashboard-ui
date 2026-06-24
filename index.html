@@ -790,7 +790,11 @@ function renderGoogleAds(data, since, until) {
     });
   }
 
-  const ageRows    = buildAgg(data.age,      ['年齡層']);
+  const gAgeOrder = ['18-24','25-34','35-44','45-54','55-64','65-UP','65+','Unknown'];
+  const ageRows = buildAgg(data.age, ['年齡層']).sort((a,b) => {
+    const ai = gAgeOrder.indexOf(a['年齡層']), bi = gAgeOrder.indexOf(b['年齡層']);
+    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  });
   const genderRows = buildAgg(data.gender,   ['性別']);
   const locRows    = buildAgg(data.location, ['城市']);
   const campRows = aggRows(filterByDate(data.campaign || [], since, until), ['廣告活動']).map(r => {
