@@ -578,7 +578,10 @@ function renderDemographic(ageData, genderData) {
     }).join('');
     return `
       <div style="display:flex;gap:24px;padding:20px;align-items:center">
-        <div style="flex:2;min-width:0;position:relative;height:320px"><canvas id="${pieId}"></canvas></div>
+        <div style="flex:2;min-width:0">
+          <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
+          <div id="${pieId}-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:8px 4px;font-size:11px;color:#555"></div>
+        </div>
         <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
       </div>
       <div class="table-wrap"><table>
@@ -612,28 +615,8 @@ function renderDemographic(ageData, genderData) {
         responsive: true, maintainAspectRatio: false,
         cutout: '60%',
         plugins: {
-          title: { display: true, text: `花費分佈（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 12 } },
-          legend: {
-            position: 'bottom',
-            labels: {
-              font: { size: 11 },
-              boxWidth: 12,
-              padding: 8,
-              generateLabels: chart => {
-                const ds = chart.data.datasets[0];
-                return chart.data.labels.map((lbl, i) => {
-                  const val = ds.data[i]||0;
-                  const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
-                  return {
-                    text: `${lbl} ${pct}%`,
-                    fillStyle: pieColors[i],
-                    strokeStyle: pieColors[i],
-                    index: i
-                  };
-                });
-              }
-            }
-          },
+          title: { display: true, text: `花費分佈（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 8 } },
+          legend: { display: false },
           tooltip: {
             callbacks: {
               label: ctx => {
@@ -646,6 +629,20 @@ function renderDemographic(ageData, genderData) {
         }
       }
     });
+    // 自訂 2 欄 legend
+    const legendEl = document.getElementById(pieId + '-legend');
+    if (legendEl) {
+      legendEl.innerHTML = rows.map((r, i) => {
+        const lbl = labelMap?.[r[labelKey]] || r[labelKey] || '—';
+        const val = +r.spend||0;
+        const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
+        const color = pieColors[i] || '#ccc';
+        return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+          <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${color};flex-shrink:0"></span>
+          <span>${lbl} ${pct}%</span>
+        </div>`;
+      }).join('');
+    }
 
     new Chart(document.getElementById(barId), {
       data: {
