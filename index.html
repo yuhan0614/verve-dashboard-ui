@@ -195,6 +195,7 @@ let sortKey = '', sortDir = -1;
 const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
 const GADS_CSV = {
   daily:    `${GADS_PUB}?gid=1644261807&single=true&output=csv`,
+  campaign: `${GADS_PUB}?gid=1433244860&single=true&output=csv`,
   age:      `${GADS_PUB}?gid=1627764612&single=true&output=csv`,
   gender:   `${GADS_PUB}?gid=1613742604&single=true&output=csv`,
   location: `${GADS_PUB}?gid=1732071302&single=true&output=csv`,
@@ -262,7 +263,7 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
-           gDailyRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes] = await Promise.all([
+           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
@@ -270,6 +271,7 @@ async function fetchData(forceRefresh = false) {
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=age`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=gender`),
       fetch(GADS_CSV.daily),
+      fetch(GADS_CSV.campaign),
       fetch(GADS_CSV.age),
       fetch(GADS_CSV.gender),
       fetch(GADS_CSV.location),
@@ -287,6 +289,7 @@ async function fetchData(forceRefresh = false) {
     adUrlMap        = (await urlRes.json()).data || {};
 
     const gDaily  = parseCSV(await gDailyRes.text());
+    const gCamp   = parseCSV(await gCampRes.text());
     const gAge    = parseCSV(await gAgeRes.text());
     const gGender = parseCSV(await gGenderRes.text());
     const gLoc    = parseCSV(await gLocRes.text());
@@ -296,7 +299,7 @@ async function fetchData(forceRefresh = false) {
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
-    renderGoogleAds({ daily: gDaily, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until);
+    renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until);
     const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
     const isCached  = campJson.cached;
     document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
@@ -770,7 +773,17 @@ function renderGoogleAds(data, since, until) {
   const ageRows    = buildAgg(data.age,      ['年齡層']);
   const genderRows = buildAgg(data.gender,   ['性別']);
   const locRows    = buildAgg(data.location, ['城市']);
-  const campRows   = buildAgg(data.adgroup,  ['廣告活動']);
+  const campRows   = (data.campaign || []).map(r => ({
+    '廣告活動': r['廣告活動'],
+    spend: parseFloat(r['花費(TWD)'])||0,
+    imp: parseInt(r['曝光'])||0,
+    clk: parseInt(r['點擊'])||0,
+    ctr: parseFloat(r['CTR(%)'])||0,
+    purchase: parseFloat(r['購買'])||0,
+    revenue: parseFloat(r['營收(TWD)'])||0,
+    cpa: parseFloat(r['CPA(TWD)'])||0,
+    roas: parseFloat(r['ROAS'])||0,
+  })).sort((a,b) => b.spend - a.spend);
   const agRows     = buildAgg(data.adgroup,  ['廣告活動','廣告群組']);
   const kwRows     = buildAgg(data.keyword,  ['廣告群組','關鍵字','比對類型']);
 
@@ -836,7 +849,7 @@ function renderGoogleAds(data, since, until) {
         <div class="chart-wrap"><canvas id="gadsTrendChart"></canvas></div>
       </div>
       <div class="chart-card">
-        <h3>📊 廣告群組花費佔比</h3>
+        <h3>📊 廣告活動花費佔比</h3>
         <div class="chart-wrap"><canvas id="gadsPieChart"></canvas></div>
       </div>
     </div>
@@ -856,7 +869,7 @@ function renderGoogleAds(data, since, until) {
             <td><span class="cell-name" title="${r['廣告活動']}">${r['廣告活動']||'—'}</span></td>
             <td>${fmtM(r.spend)}</td>
             <td><div class="spend-bar-wrap"><span style="font-size:11px;color:#888">${pct}%</span><div class="spend-bar" style="width:${bw}px;background:${gadsColors[i%gadsColors.length]}"></div></div></td>
-            <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr)}</td>
+            <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr*100)}</td>
             <td>${fmtN(r.purchase)}</td><td>${fmtM(r.revenue)}</td>
             <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
             <td>${r.cpa?fmtM(r.cpa):'<span class="na">—</span>'}</td>
