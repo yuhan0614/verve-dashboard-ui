@@ -1165,8 +1165,9 @@ function renderGoogleAds(data, since, until) {
   if (ageRows.length) {
     const AGE_EXCLUDE = ['不明', 'Unknown', 'unknown'];
     const ageBarRows = ageRows.filter(r => !AGE_EXCLUDE.includes(r['年齡層']));
-    const ageColors = PIE_COLORS.slice(0, ageRows.length);
-    const ageTotalSpend = ageRows.reduce((s,r)=>s+r.spend, 0);
+    const agePieRows = ageBarRows;
+    const ageColors = PIE_COLORS.slice(0, agePieRows.length);
+    const ageTotalSpend = agePieRows.reduce((s,r)=>s+r.spend, 0);
     el.insertAdjacentHTML('beforeend', `
       <div class="table-card" style="margin-top:20px">
         <div class="table-header"><h3>👥 年齡分析</h3></div>
@@ -1180,10 +1181,10 @@ function renderGoogleAds(data, since, until) {
         ${gadsTable(ageRows, [{label:'年齡層',key:'年齡層'},...metricCols])}
       </div>`);
     new Chart(document.getElementById('gadsAgePieChart'), {
-      type:'doughnut', data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[{data:ageRows.map(r=>r.spend), backgroundColor:ageColors, borderWidth:2, borderColor:'#fff'}] },
+      type:'doughnut', data:{ labels:agePieRows.map(r=>r['年齡層']), datasets:[{data:agePieRows.map(r=>r.spend), backgroundColor:ageColors, borderWidth:2, borderColor:'#fff'}] },
       options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}}, legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${ageTotalSpend?(ctx.parsed/ageTotalSpend*100).toFixed(1):0}%)`}} } }
     });
-    document.getElementById('gadsAgePieChart-legend').innerHTML = ageRows.map((r,i) => {
+    document.getElementById('gadsAgePieChart-legend').innerHTML = agePieRows.map((r,i) => {
       const pct = ageTotalSpend ? (r.spend/ageTotalSpend*100).toFixed(1) : '0';
       return `<div style="width:50%;display:flex;align-items:center;gap:5px;padding:2px 4px 2px 0;box-sizing:border-box;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span>${r['年齡層']} ${pct}%</span></div>`;
     }).join('');
