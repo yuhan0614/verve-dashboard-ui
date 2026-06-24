@@ -919,7 +919,8 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
     });
     const gFiltered = aggRows(filterByDate(gadsRows, since, until), [gadsLabelKey]);
     gFiltered.forEach(r => {
-      const lbl = r._keys[gadsLabelKey];
+      const raw = r._keys[gadsLabelKey];
+      const lbl = raw === '65-UP' ? '65+' : raw;
       if (!map[lbl]) map[lbl] = { spend:0, purchase:0, revenue:0 };
       map[lbl].spend   += r.spend||0;
       map[lbl].purchase+= r.purchase||0;
