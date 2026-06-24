@@ -775,17 +775,12 @@ function renderGoogleAds(data, since, until) {
   const ageRows    = buildAgg(data.age,      ['年齡層']);
   const genderRows = buildAgg(data.gender,   ['性別']);
   const locRows    = buildAgg(data.location, ['城市']);
-  const campRows   = (data.campaign || []).map(r => ({
-    '廣告活動': r['廣告活動'],
-    spend: parseFloat(r['花費(TWD)'])||0,
-    imp: parseInt(r['曝光'])||0,
-    clk: parseInt(r['點擊'])||0,
-    ctr: parseFloat(r['CTR(%)'])||0,
-    purchase: parseFloat(r['購買'])||0,
-    revenue: parseFloat(r['營收(TWD)'])||0,
-    cpa: parseFloat(r['CPA(TWD)'])||0,
-    roas: parseFloat(r['ROAS'])||0,
-  })).sort((a,b) => b.spend - a.spend);
+  const campRows = aggRows(filterByDate(data.campaign || [], since, until), ['廣告活動']).map(r => {
+    const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
+    const cpa  = r.purchase > 0 ? r.spend/r.purchase : 0;
+    const roas = r.spend > 0 ? r.revenue/r.spend : 0;
+    return { ...r._keys, spend:r.spend, imp:r.imp, clk:r.clk, ctr, purchase:r.purchase, revenue:r.revenue, cpa, roas };
+  });
   const agRows     = buildAgg(data.adgroup,  ['廣告活動','廣告群組']);
   const kwRows     = buildAgg(data.keyword,  ['廣告群組','關鍵字','比對類型']);
 
