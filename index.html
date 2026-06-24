@@ -928,48 +928,61 @@ function renderGoogleAds(data, since, until) {
     el.insertAdjacentHTML('beforeend', `
       <div class="table-card" style="margin-top:20px">
         <div class="table-header"><h3>👥 年齡分析</h3></div>
-        <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
-          <div style="width:280px;flex-shrink:0"><canvas id="gadsAgePieChart"></canvas></div>
-          <div style="flex:1;min-width:0"><canvas id="gadsAgeBarChart"></canvas></div>
+        <div style="display:flex;gap:24px;padding:20px;align-items:center">
+          <div style="flex:2;min-width:0">
+            <div style="position:relative;height:240px"><canvas id="gadsAgePieChart"></canvas></div>
+            <div id="gadsAgePieChart-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:8px 4px;font-size:11px;color:#555"></div>
+          </div>
+          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsAgeBarChart"></canvas></div>
         </div>
         ${gadsTable(ageRows, [{label:'年齡層',key:'年齡層'},...metricCols])}
       </div>`);
     new Chart(document.getElementById('gadsAgePieChart'), {
       type:'doughnut', data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[{data:ageRows.map(r=>r.spend), backgroundColor:ageColors, borderWidth:2, borderColor:'#fff'}] },
-      options:{ cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（年齡）',font:{size:13,weight:'bold'},padding:{bottom:12}}, legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8,generateLabels:chart=>{const ds=chart.data.datasets[0];return chart.data.labels.map((lbl,i)=>({text:`${lbl} ${ageTotalSpend?(ds.data[i]/ageTotalSpend*100).toFixed(1):'0'}%`,fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],index:i}))}}} } }
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}}, legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${ageTotalSpend?(ctx.parsed/ageTotalSpend*100).toFixed(1):0}%)`}} } }
     });
+    document.getElementById('gadsAgePieChart-legend').innerHTML = ageRows.map((r,i) => {
+      const pct = ageTotalSpend ? (r.spend/ageTotalSpend*100).toFixed(1) : '0';
+      return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span>${r['年齡層']} ${pct}%</span></div>`;
+    }).join('');
     new Chart(document.getElementById('gadsAgeBarChart'), {
       data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[
-        {type:'bar',label:'花費',data:ageRows.map(r=>r.spend),backgroundColor:ageColors.map(c=>c+'88'),borderColor:ageColors,borderWidth:1,yAxisID:'y',borderRadius:4},
+        {type:'bar',label:'花費',data:ageRows.map(r=>r.spend),backgroundColor:'#a8c8f8',borderColor:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4},
         {type:'line',label:'ROAS',data:ageRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
       ]},
-      options:{ plugins:{title:{display:true,text:'花費 / ROAS（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'花費 / ROAS（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
     });
   }
 
-  // 性別分析（donut + bar + table）
   if (genderRows.length) {
     const gColors = genderRows.map(r=>r['性別']==='女性'?'#f74f7e':r['性別']==='男性'?'#4285f4':'#aaa');
     const gTotalSpend = genderRows.reduce((s,r)=>s+r.spend, 0);
     el.insertAdjacentHTML('beforeend', `
       <div class="table-card" style="margin-top:20px">
         <div class="table-header"><h3>⚧ 性別分析</h3></div>
-        <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
-          <div style="width:280px;flex-shrink:0"><canvas id="gadsGenderPieChart"></canvas></div>
-          <div style="flex:1;min-width:0"><canvas id="gadsGenderBarChart"></canvas></div>
+        <div style="display:flex;gap:24px;padding:20px;align-items:center">
+          <div style="flex:2;min-width:0">
+            <div style="position:relative;height:240px"><canvas id="gadsGenderPieChart"></canvas></div>
+            <div id="gadsGenderPieChart-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:8px 4px;font-size:11px;color:#555"></div>
+          </div>
+          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsGenderBarChart"></canvas></div>
         </div>
         ${gadsTable(genderRows, [{label:'性別',key:'性別'},...metricCols])}
       </div>`);
     new Chart(document.getElementById('gadsGenderPieChart'), {
       type:'doughnut', data:{ labels:genderRows.map(r=>r['性別']), datasets:[{data:genderRows.map(r=>r.spend), backgroundColor:gColors, borderWidth:2, borderColor:'#fff'}] },
-      options:{ cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（性別）',font:{size:13,weight:'bold'},padding:{bottom:12}}, legend:{position:'bottom',labels:{font:{size:11},boxWidth:12,padding:8,generateLabels:chart=>{const ds=chart.data.datasets[0];return chart.data.labels.map((lbl,i)=>({text:`${lbl} ${gTotalSpend?(ds.data[i]/gTotalSpend*100).toFixed(1):'0'}%`,fillStyle:ds.backgroundColor[i],strokeStyle:ds.backgroundColor[i],index:i}))}}} } }
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}}, legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${gTotalSpend?(ctx.parsed/gTotalSpend*100).toFixed(1):0}%)`}} } }
     });
+    document.getElementById('gadsGenderPieChart-legend').innerHTML = genderRows.map((r,i) => {
+      const pct = gTotalSpend ? (r.spend/gTotalSpend*100).toFixed(1) : '0';
+      return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span>${r['性別']} ${pct}%</span></div>`;
+    }).join('');
     new Chart(document.getElementById('gadsGenderBarChart'), {
       data:{ labels:genderRows.map(r=>r['性別']), datasets:[
         {type:'bar',label:'花費',data:genderRows.map(r=>r.spend),backgroundColor:gColors.map(c=>c+'88'),borderColor:gColors,borderWidth:1,yAxisID:'y',borderRadius:4},
         {type:'line',label:'ROAS',data:genderRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
       ]},
-      options:{ plugins:{title:{display:true,text:'花費 / ROAS（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'花費 / ROAS（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
     });
   }
 }
