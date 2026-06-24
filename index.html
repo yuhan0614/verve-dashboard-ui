@@ -1312,6 +1312,7 @@ function renderSholine(rows, since, until, trendData, gDaily) {
   const aov = total.orders > 0 ? total.revenue/total.orders : 0;
 
   document.getElementById('tab-sholine').innerHTML = `
+    <div style="padding:8px 4px 4px;font-size:12px;color:#aaa">＊尚未串接 API，目前手動更新到前一天</div>
     <div class="summary-grid">
       <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
       <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
