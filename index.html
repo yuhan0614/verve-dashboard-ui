@@ -313,6 +313,8 @@ async function fetchData(forceRefresh = false) {
   }
 }
 
+const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6','#f59e0b','#aaa'];
+
 // ── Formatters ────────────────────────────────────────────
 function fmtN(n, d=0) { if (n == null || isNaN(n)) return '<span class="na">—</span>'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtM(n) { if (!n && n !== 0) return '<span class="na">—</span>'; return 'NT$'+Math.round(n).toLocaleString('zh-TW'); }
@@ -539,7 +541,7 @@ function renderAdTable(data) {
 
 function renderDemographic(ageData, genderData) {
   const el = document.getElementById('tab-perf');
-  const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6','#f59e0b','#aaa'];
+
 
   function buildSectionHTML(rows, labelKey, labelMap, pieId, barId) {
     if (!rows.length) return '<p style="color:#aaa;padding:20px">無資料</p>';
@@ -869,7 +871,7 @@ function renderGoogleAds(data, since, until) {
             <td><span class="cell-name" title="${r['廣告活動']}">${r['廣告活動']||'—'}</span></td>
             <td>${fmtM(r.spend)}</td>
             <td><div class="spend-bar-wrap"><span style="font-size:11px;color:#888">${pct}%</span><div class="spend-bar" style="width:${bw}px;background:${gadsColors[i%gadsColors.length]}"></div></div></td>
-            <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr*100)}</td>
+            <td>${fmtN(r.imp)}</td><td>${fmtN(r.clk)}</td><td>${fmtP(r.ctr)}</td>
             <td>${fmtN(r.purchase)}</td><td>${fmtM(r.revenue)}</td>
             <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
             <td>${r.cpa?fmtM(r.cpa):'<span class="na">—</span>'}</td>
