@@ -319,7 +319,7 @@ async function fetchData(forceRefresh = false) {
     const sholineRaw = parseCSV(await sholineRes.text());
 
     renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
-    renderSholine(sholineRaw, since, until);
+    renderSholine(sholineRaw, since, until, trendData, gDaily);
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
@@ -1275,7 +1275,7 @@ function renderGoogleKeyword(kwRows) {
 }
 
 let sholineTrendChart = null;
-function renderSholine(rows, since, until) {
+function renderSholine(rows, since, until, trendData, gDaily) {
   const norm = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
   const filtered = rows
     .filter(r => r['日期'] && norm(r['日期']) >= since && norm(r['日期']) <= until)
@@ -1288,9 +1288,24 @@ function renderSholine(rows, since, until) {
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
+  // 每日廣告花費 (Meta + Google)
+  const metaSpendMap = {};
+  (trendData||[]).forEach(r => { if (r.date_start) metaSpendMap[r.date_start] = (r.spend||0); });
+  const gSpendMap = {};
+  (gDaily||[]).forEach(r => { if (r['日期']) {
+    const norm2 = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
+    const d = r['日期'].includes('-') ? r['日期'] : norm2(r['日期']);
+    gSpendMap[d] = (gSpendMap[d]||0) + (parseFloat(r['花費(TWD)'])||0);
+  }});
+  filtered.forEach(r => {
+    r.adSpend = (metaSpendMap[r.date]||0) + (gSpendMap[r.date]||0);
+    r.siteRoas = r.adSpend > 0 ? r.revenue/r.adSpend : 0;
+  });
+
   const total = filtered.reduce((a,r) => ({
-    revenue: a.revenue+r.revenue, orders: a.orders+r.orders, sessions: a.sessions+r.sessions,
-  }), {revenue:0, orders:0, sessions:0});
+    revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
+    sessions: a.sessions+r.sessions, adSpend: a.adSpend+r.adSpend,
+  }), {revenue:0, orders:0, sessions:0, adSpend:0});
   const aov = total.orders > 0 ? total.revenue/total.orders : 0;
 
   document.getElementById('tab-sholine').innerHTML = `
@@ -1308,7 +1323,7 @@ function renderSholine(rows, since, until) {
       <div class="table-header"><h3>📋 每日明細</h3></div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th>
+          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th><th>廣告花費</th><th>全站ROAS</th>
         </tr></thead>
         <tbody>${filtered.map(r => {
           const aov = r.orders > 0 ? r.revenue/r.orders : 0;
@@ -1317,6 +1332,8 @@ function renderSholine(rows, since, until) {
             <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td>
             <td>${r.sessions.toLocaleString()}</td><td>${(r.cvr*100).toFixed(2)}%</td>
             <td>${fmtM(aov)}</td>
+            <td>${fmtM(r.adSpend)}</td>
+            <td class="${rc(r.siteRoas)}">${r.siteRoas?r.siteRoas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
