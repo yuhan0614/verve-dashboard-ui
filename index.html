@@ -162,6 +162,7 @@
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
   <button class="tab-btn" onclick="switchTab('gkw')">🔑 Google 關鍵字</button>
+  <button class="tab-btn" onclick="switchTab('sholine')">🛍️ SHOLINE</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -190,6 +191,11 @@
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
+  <!-- SHOLINE tab -->
+  <div class="tab-panel" id="tab-sholine">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
   <!-- 素材 tab -->
   <div class="tab-panel" id="tab-creative">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
@@ -205,6 +211,7 @@ let allAdData = [];
 let adUrlMap = {};
 let sortKey = '', sortDir = -1;
 
+const SHOLINE_CSV = 'https://docs.google.com/spreadsheets/d/10XkXDRqrB2ywgx4hOeXsLSJ1fApUhyOyrghS9aRjt_Q/gviz/tq?tqx=out:csv&sheet=0';
 const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
 const GADS_CSV = {
   daily:    `${GADS_PUB}?gid=1644261807&single=true&output=csv`,
@@ -276,7 +283,7 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
-           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes] = await Promise.all([
+           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
@@ -290,6 +297,7 @@ async function fetchData(forceRefresh = false) {
       fetch(GADS_CSV.location),
       fetch(GADS_CSV.adgroup),
       fetch(GADS_CSV.keyword),
+      fetch(SHOLINE_CSV),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
@@ -307,9 +315,11 @@ async function fetchData(forceRefresh = false) {
     const gGender = parseCSV(await gGenderRes.text());
     const gLoc    = parseCSV(await gLocRes.text());
     const gAg     = parseCSV(await gAgRes.text());
-    const gKw     = parseCSV(await gKwRes.text());
+    const gKw       = parseCSV(await gKwRes.text());
+    const sholineRaw = parseCSV(await sholineRes.text());
 
     renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
+    renderSholine(sholineRaw, since, until);
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
@@ -1262,6 +1272,76 @@ function renderGoogleKeyword(kwRows) {
         </div>
       </div>
     </div>`;
+}
+
+let sholineTrendChart = null;
+function renderSholine(rows, since, until) {
+  // 日期格式 2026/6/1 → 2026-06-01
+  const norm = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
+  const filtered = rows
+    .filter(r => r['日期'] && norm(r['日期']) >= since && norm(r['日期']) <= until)
+    .map(r => ({
+      date:    norm(r['日期']),
+      revenue: parseFloat(r['網店成交額']?.replace(/,/g,''))||0,
+      orders:  parseInt(r['網店成交-訂單數']?.replace(/,/g,''))||0,
+      netRev:  parseFloat(r['網店總營業額']?.replace(/,/g,''))||0,
+      netOrd:  parseInt(r['網店總營業額-訂單數']?.replace(/,/g,''))||0,
+    }))
+    .sort((a,b) => a.date > b.date ? 1 : -1);
+
+  const total = filtered.reduce((a,r) => ({
+    revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
+    netRev: a.netRev+r.netRev, netOrd: a.netOrd+r.netOrd,
+  }), {revenue:0,orders:0,netRev:0,netOrd:0});
+  const aov    = total.orders  > 0 ? total.revenue/total.orders  : 0;
+  const netAov = total.netOrd  > 0 ? total.netRev/total.netOrd   : 0;
+
+  document.getElementById('tab-sholine').innerHTML = `
+    <div class="summary-grid">
+      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc c-green"><div class="lbl">總營業額</div><div class="val">${fmtM(total.netRev)}</div><div class="sub">扣除取消／退貨</div></div>
+      <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
+      <div class="sc c-teal"><div class="lbl">有效訂單數</div><div class="val">${total.netOrd.toLocaleString()}</div><div class="sub">扣除取消／退貨</div></div>
+      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
+      <div class="sc"><div class="lbl">有效平均客單價</div><div class="val">${fmtM(netAov)}</div><div class="sub">總營業額 / 有效訂單</div></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:20px">
+      <h3>📅 每日趨勢</h3>
+      <div style="position:relative;height:280px"><canvas id="sholineTrendChart"></canvas></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header"><h3>📋 每日明細</h3></div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>日期</th><th>成交額</th><th>成交訂單</th><th>平均客單價</th>
+          <th>總營業額</th><th>有效訂單</th><th>有效客單價</th>
+        </tr></thead>
+        <tbody>${filtered.map(r => {
+          const aov = r.orders > 0 ? r.revenue/r.orders : 0;
+          const naov = r.netOrd > 0 ? r.netRev/r.netOrd : 0;
+          return `<tr>
+            <td>${r.date}</td>
+            <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td><td>${fmtM(aov)}</td>
+            <td>${fmtM(r.netRev)}</td><td>${r.netOrd.toLocaleString()}</td><td>${fmtM(naov)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
+
+  if (sholineTrendChart) sholineTrendChart.destroy();
+  sholineTrendChart = new Chart(document.getElementById('sholineTrendChart'), {
+    data: { labels: filtered.map(r=>r.date), datasets: [
+      { type:'bar',  label:'成交額',   data: filtered.map(r=>r.revenue), backgroundColor:'rgba(82,196,26,0.35)', borderColor:'#52c41a', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
+      { type:'line', label:'總營業額', data: filtered.map(r=>r.netRev),  borderColor:'#1877f2', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y', order:1 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
+      scales: {
+        x: { grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:14} },
+        y: { beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
+      }
+    }
+  });
 }
 
 fetchData();
