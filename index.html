@@ -1314,6 +1314,8 @@ function renderSholine(rows, since, until, trendData, gDaily) {
       <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
       <div class="sc"><div class="lbl">工作階段</div><div class="val">${total.sessions.toLocaleString()}</div><div class="sub">Sessions</div></div>
       <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
+      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtM(total.adSpend)}</div><div class="sub">Meta + Google</div></div>
+      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${total.adSpend>0?(total.revenue/total.adSpend).toFixed(2)+'x':'—'}</div><div class="sub">成交額 / 廣告花費</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
