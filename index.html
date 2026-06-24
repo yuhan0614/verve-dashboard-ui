@@ -565,7 +565,7 @@ function renderDemographic(ageData, genderData) {
     }).join('');
     return `
       <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
-        <div style="width:280px;flex-shrink:0"><canvas id="${pieId}"></canvas></div>
+        <div style="width:220px;flex-shrink:0"><canvas id="${pieId}"></canvas></div>
         <div style="flex:1;min-width:0"><canvas id="${barId}"></canvas></div>
       </div>
       <div class="table-wrap"><table>
@@ -585,13 +585,14 @@ function renderDemographic(ageData, genderData) {
     const totalSpend = spends.reduce((a,b)=>a+b, 0);
     const dimName = labelKey === 'age' ? '年齡' : '性別';
 
-    const colors = labelKey === 'gender'
+    const pieColors = labelKey === 'gender'
       ? rows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
       : PIE_COLORS.slice(0, rows.length);
+    const barColor = labelKey === 'gender' ? null : '#a8c8f8';
 
     new Chart(document.getElementById(pieId), {
       type: 'doughnut',
-      data: { labels, datasets: [{ data: spends, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+      data: { labels, datasets: [{ data: spends, backgroundColor: pieColors, borderWidth: 2, borderColor: '#fff' }] },
       options: {
         cutout: '60%',
         plugins: {
@@ -609,8 +610,8 @@ function renderDemographic(ageData, genderData) {
                   const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
                   return {
                     text: `${lbl} ${pct}%`,
-                    fillStyle: ds.backgroundColor[i],
-                    strokeStyle: ds.backgroundColor[i],
+                    fillStyle: pieColors[i],
+                    strokeStyle: pieColors[i],
                     index: i
                   };
                 });
@@ -634,7 +635,7 @@ function renderDemographic(ageData, genderData) {
       data: {
         labels,
         datasets: [
-          { type:'bar', label:'花費', data:spends, backgroundColor: colors.map(c=>c+'88'), borderColor: colors, borderWidth:1, yAxisID:'y', borderRadius:4 },
+          { type:'bar', label:'花費', data:spends, backgroundColor: barColor ? barColor : pieColors.map(c=>c+'88'), borderColor: barColor ? '#7aaee8' : pieColors, borderWidth:1, yAxisID:'y', borderRadius:4 },
           { type:'line', label:'ROAS', data:roases, borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointStyle:'circle', pointRadius:4, pointBackgroundColor:'#fff', pointBorderColor:'#e8833a', pointBorderWidth:2, tension:0.3, yAxisID:'y2' }
         ]
       },
