@@ -580,7 +580,7 @@ function renderDemographic(ageData, genderData) {
       <div style="display:flex;gap:24px;padding:20px;align-items:center">
         <div style="flex:2;min-width:0">
           <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
-          <div id="${pieId}-legend" style="display:flex;flex-wrap:wrap;gap:6px 0;padding:10px 4px;font-size:11px;color:#555"></div>
+          <div id="${pieId}-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;padding:10px 4px;font-size:11px;color:#555"></div>
         </div>
         <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
       </div>
@@ -637,9 +637,10 @@ function renderDemographic(ageData, genderData) {
         const val = +r.spend||0;
         const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
         const color = pieColors[i] || '#ccc';
-        return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap;width:50%;box-sizing:border-box;padding-right:4px">
+        return `<div style="display:flex;align-items:center;gap:5px;min-width:0">
           <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${color};flex-shrink:0"></span>
-          <span>${lbl} ${pct}%</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lbl}</span>
+          <span style="flex-shrink:0;color:#888">${pct}%</span>
         </div>`;
       }).join('');
     }
@@ -933,7 +934,7 @@ function renderGoogleAds(data, since, until) {
         <div style="display:flex;gap:24px;padding:20px;align-items:center">
           <div style="flex:2;min-width:0">
             <div style="position:relative;height:240px"><canvas id="gadsAgePieChart"></canvas></div>
-            <div id="gadsAgePieChart-legend" style="display:flex;flex-wrap:wrap;gap:6px 0;padding:10px 4px;font-size:11px;color:#555"></div>
+            <div id="gadsAgePieChart-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;padding:10px 4px;font-size:11px;color:#555"></div>
           </div>
           <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsAgeBarChart"></canvas></div>
         </div>
@@ -945,7 +946,7 @@ function renderGoogleAds(data, since, until) {
     });
     document.getElementById('gadsAgePieChart-legend').innerHTML = ageRows.map((r,i) => {
       const pct = ageTotalSpend ? (r.spend/ageTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap;width:50%;box-sizing:border-box;padding-right:4px"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span>${r['年齡層']} ${pct}%</span></div>`;
+      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['年齡層']}</span><span style="flex-shrink:0;color:#888">${pct}%</span></div>`;
     }).join('');
     new Chart(document.getElementById('gadsAgeBarChart'), {
       data:{ labels:ageBarRows.map(r=>r['年齡層']), datasets:[
@@ -965,7 +966,7 @@ function renderGoogleAds(data, since, until) {
         <div style="display:flex;gap:24px;padding:20px;align-items:center">
           <div style="flex:2;min-width:0">
             <div style="position:relative;height:240px"><canvas id="gadsGenderPieChart"></canvas></div>
-            <div id="gadsGenderPieChart-legend" style="display:flex;flex-wrap:wrap;gap:6px 0;padding:10px 4px;font-size:11px;color:#555"></div>
+            <div id="gadsGenderPieChart-legend" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;padding:10px 4px;font-size:11px;color:#555"></div>
           </div>
           <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsGenderBarChart"></canvas></div>
         </div>
@@ -977,7 +978,7 @@ function renderGoogleAds(data, since, until) {
     });
     document.getElementById('gadsGenderPieChart-legend').innerHTML = genderRows.map((r,i) => {
       const pct = gTotalSpend ? (r.spend/gTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap;width:50%;box-sizing:border-box;padding-right:4px"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span>${r['性別']} ${pct}%</span></div>`;
+      return `<div style="display:flex;align-items:center;gap:5px;min-width:0"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['性別']}</span><span style="flex-shrink:0;color:#888">${pct}%</span></div>`;
     }).join('');
     new Chart(document.getElementById('gadsGenderBarChart'), {
       data:{ labels:genderRows.map(r=>r['性別']), datasets:[
