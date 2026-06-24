@@ -162,7 +162,7 @@
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
   <button class="tab-btn" onclick="switchTab('gkw')">🔑 Google 關鍵字</button>
-  <button class="tab-btn" onclick="switchTab('sholine')">🛍️ SHOLINE</button>
+  <button class="tab-btn" onclick="switchTab('sholine')">🛍️ SHOPLINE</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -1284,22 +1284,18 @@ function renderSholine(rows, since, until) {
       revenue:  parseFloat(r['網店成交額']?.replace(/,/g,''))||0,
       orders:   parseInt(r['網店成交-訂單數']?.replace(/,/g,''))||0,
       sessions: parseInt(r['總工作階段數']?.replace(/,/g,''))||0,
-      netRev:   parseFloat(r['網店總營業額']?.replace(/,/g,''))||0,
-      netOrd:   parseInt(r['網店總營業額-訂單數']?.replace(/,/g,''))||0,
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
   const total = filtered.reduce((a,r) => ({
-    revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
-    sessions: a.sessions+r.sessions, netRev: a.netRev+r.netRev, netOrd: a.netOrd+r.netOrd,
-  }), {revenue:0, orders:0, sessions:0, netRev:0, netOrd:0});
+    revenue: a.revenue+r.revenue, orders: a.orders+r.orders, sessions: a.sessions+r.sessions,
+  }), {revenue:0, orders:0, sessions:0});
   const aov = total.orders > 0 ? total.revenue/total.orders : 0;
   const cvr = total.sessions > 0 ? total.orders/total.sessions*100 : 0;
 
   document.getElementById('tab-sholine').innerHTML = `
     <div class="summary-grid">
       <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc c-green"><div class="lbl">總營業額</div><div class="val">${fmtM(total.netRev)}</div><div class="sub">扣除取消／退貨</div></div>
       <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
       <div class="sc"><div class="lbl">工作階段</div><div class="val">${total.sessions.toLocaleString()}</div><div class="sub">Sessions</div></div>
       <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
@@ -1313,7 +1309,7 @@ function renderSholine(rows, since, until) {
       <div class="table-header"><h3>📋 每日明細</h3></div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th><th>總營業額</th>
+          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th>
         </tr></thead>
         <tbody>${filtered.map(r => {
           const aov = r.orders > 0 ? r.revenue/r.orders : 0;
@@ -1322,7 +1318,7 @@ function renderSholine(rows, since, until) {
             <td>${r.date}</td>
             <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td>
             <td>${r.sessions.toLocaleString()}</td><td>${cvr.toFixed(2)}%</td>
-            <td>${fmtM(aov)}</td><td>${fmtM(r.netRev)}</td>
+            <td>${fmtM(aov)}</td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
