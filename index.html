@@ -1328,7 +1328,7 @@ function renderSholine(rows, since, until, trendData, gDaily) {
       <div class="table-header"><h3>📋 每日明細</h3></div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th><th>廣告花費</th><th>全站ROAS</th>
+          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th><th style="color:#8B5E3C">廣告花費</th><th style="color:#8B5E3C">全站ROAS</th>
         </tr></thead>
         <tbody>${filtered.map(r => {
           const aov = r.orders > 0 ? r.revenue/r.orders : 0;
@@ -1337,7 +1337,7 @@ function renderSholine(rows, since, until, trendData, gDaily) {
             <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td>
             <td>${r.sessions.toLocaleString()}</td><td>${(r.cvr*100).toFixed(2)}%</td>
             <td>${fmtM(aov)}</td>
-            <td>${fmtM(r.adSpend)}</td>
+            <td style="color:#8B5E3C;font-weight:400">${fmtM(r.adSpend)}</td>
             <td style="color:#8B5E3C;font-weight:400">${r.siteRoas?r.siteRoas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
           </tr>`;
         }).join('')}</tbody>
