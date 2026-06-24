@@ -1288,7 +1288,18 @@ function renderSholine(rows, since, until) {
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
+  const total = filtered.reduce((a,r) => ({
+    revenue: a.revenue+r.revenue, orders: a.orders+r.orders, sessions: a.sessions+r.sessions,
+  }), {revenue:0, orders:0, sessions:0});
+  const aov = total.orders > 0 ? total.revenue/total.orders : 0;
+
   document.getElementById('tab-sholine').innerHTML = `
+    <div class="summary-grid">
+      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
+      <div class="sc"><div class="lbl">工作階段</div><div class="val">${total.sessions.toLocaleString()}</div><div class="sub">Sessions</div></div>
+      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
+    </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
       <div style="position:relative;height:280px"><canvas id="sholineTrendChart"></canvas></div>
