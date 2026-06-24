@@ -923,6 +923,8 @@ function renderGoogleAds(data, since, until) {
 
   // 年齡分析（donut + bar + table）
   if (ageRows.length) {
+    const AGE_EXCLUDE = ['不明', 'Unknown', 'unknown'];
+    const ageBarRows = ageRows.filter(r => !AGE_EXCLUDE.includes(r['年齡層']));
     const ageColors = PIE_COLORS.slice(0, ageRows.length);
     const ageTotalSpend = ageRows.reduce((s,r)=>s+r.spend, 0);
     el.insertAdjacentHTML('beforeend', `
@@ -946,9 +948,9 @@ function renderGoogleAds(data, since, until) {
       return `<div style="display:flex;align-items:center;gap:5px;white-space:nowrap;width:50%;box-sizing:border-box;padding-right:4px"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span>${r['年齡層']} ${pct}%</span></div>`;
     }).join('');
     new Chart(document.getElementById('gadsAgeBarChart'), {
-      data:{ labels:ageRows.map(r=>r['年齡層']), datasets:[
-        {type:'bar',label:'花費',data:ageRows.map(r=>r.spend),backgroundColor:'#a8c8f8',borderColor:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4},
-        {type:'line',label:'ROAS',data:ageRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
+      data:{ labels:ageBarRows.map(r=>r['年齡層']), datasets:[
+        {type:'bar',label:'花費',data:ageBarRows.map(r=>r.spend),backgroundColor:'#a8c8f8',borderColor:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4},
+        {type:'line',label:'ROAS',data:ageBarRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2'}
       ]},
       options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'花費 / ROAS（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
     });
