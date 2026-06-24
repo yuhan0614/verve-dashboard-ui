@@ -309,7 +309,7 @@ async function fetchData(forceRefresh = false) {
     const gAg     = parseCSV(await gAgRes.text());
     const gKw     = parseCSV(await gKwRes.text());
 
-    renderOverall(trendData, gDaily, since, until);
+    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
     renderPerf(campData, trendData, since, until);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
@@ -779,7 +779,8 @@ function gadsTable(rows, cols) {
 }
 
 // ── 媒體總成效 Tab ─────────────────────────────────────────
-function renderOverall(trendData, gDaily, since, until) {
+let overallAgePie=null,overallAgeBar=null,overallGenderPie=null,overallGenderBar=null;
+function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender) {
   const el = document.getElementById('tab-overall');
 
   // Meta daily totals
@@ -901,6 +902,101 @@ function renderOverall(trendData, gDaily, since, until) {
         tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmtM(ctx.parsed)} (${total.spend?(ctx.parsed/total.spend*100).toFixed(1):0}%)`}} }
     }
   });
+
+  // ── 年齡 & 性別合併 ──────────────────────────────────────
+  const AGE_ORDER = ['13-17','18-24','25-34','35-44','45-54','55-64','65+'];
+  const AGE_EXCL  = ['不明','unknown','Unknown'];
+  const GDR_MAP   = { male:'男性', female:'女性', unknown:'不明' };
+
+  function combineDemo(metaRows, metaLabelKey, metaLabelMap, gadsRows, gadsLabelKey) {
+    const map = {};
+    metaRows.forEach(r => {
+      const lbl = metaLabelMap?.[r[metaLabelKey]] || r[metaLabelKey] || '—';
+      if (!map[lbl]) map[lbl] = { spend:0, purchase:0, revenue:0 };
+      map[lbl].spend   += parseFloat(r.spend)||0;
+      map[lbl].purchase+= parseFloat(r.purchase)||0;
+      map[lbl].revenue += parseFloat(r.purchase_value)||0;
+    });
+    const gFiltered = aggRows(filterByDate(gadsRows, since, until), [gadsLabelKey]);
+    gFiltered.forEach(r => {
+      const lbl = r._keys[gadsLabelKey];
+      if (!map[lbl]) map[lbl] = { spend:0, purchase:0, revenue:0 };
+      map[lbl].spend   += r.spend||0;
+      map[lbl].purchase+= r.purchase||0;
+      map[lbl].revenue += r.revenue||0;
+    });
+    return Object.entries(map).map(([lbl, v]) => ({
+      label: lbl, spend: v.spend, purchase: v.purchase, revenue: v.revenue,
+      roas: v.spend > 0 ? v.revenue/v.spend : 0,
+      cpa:  v.purchase > 0 ? v.spend/v.purchase : 0,
+    }));
+  }
+
+  function renderDemoSection(rows, order, excludeBar, pieId, barId, labelTitle, cardTitle) {
+    const sorted = order
+      ? rows.sort((a,b) => { const ai=order.indexOf(a.label),bi=order.indexOf(b.label); return (ai<0?99:ai)-(bi<0?99:bi); })
+      : rows.sort((a,b) => b.spend - a.spend);
+    const barRows   = sorted.filter(r => !excludeBar.includes(r.label));
+    const totalSpend = sorted.reduce((s,r)=>s+r.spend, 0);
+    const colors    = PIE_COLORS.slice(0, sorted.length);
+
+    el.insertAdjacentHTML('beforeend', `
+      <div class="table-card" style="margin-top:20px">
+        <div class="table-header"><h3>${cardTitle}</h3></div>
+        <div style="display:flex;gap:24px;padding:20px;align-items:center">
+          <div style="flex:2;min-width:0">
+            <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
+            <div id="${pieId}-legend" style="display:flex;flex-wrap:wrap;padding:10px 4px;font-size:11px;color:#555"></div>
+          </div>
+          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>${labelTitle}</th><th>花費</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th></tr></thead>
+          <tbody>${sorted.map(r=>`<tr>
+            <td><strong>${r.label}</strong></td>
+            <td>${fmtM(r.spend)}</td><td>${fmtN(r.purchase,0)}</td><td>${fmtM(r.revenue)}</td>
+            <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+            <td>${r.cpa?fmtM(r.cpa):'<span class="na">—</span>'}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`);
+
+    const pieEl = document.getElementById(pieId);
+    const barEl = document.getElementById(barId);
+    if (!pieEl || !barEl) return;
+
+    new Chart(pieEl, {
+      type:'doughnut', data:{ labels:sorted.map(r=>r.label), datasets:[{data:sorted.map(r=>r.spend), backgroundColor:colors, borderWidth:2, borderColor:'#fff'}] },
+      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${totalSpend?(ctx.parsed/totalSpend*100).toFixed(1):0}%)`}} } }
+    });
+    document.getElementById(pieId+'-legend').innerHTML = sorted.map((r,i)=>{
+      const pct = totalSpend ? (r.spend/totalSpend*100).toFixed(1) : '0';
+      return `<div style="width:50%;display:flex;align-items:center;gap:5px;padding:2px 4px 2px 0;box-sizing:border-box;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span><span>${r.label} ${pct}%</span></div>`;
+    }).join('');
+
+    const barColor = labelTitle==='年齡層' ? '#a8c8f8' : null;
+    const barColors = barColor ? barColor : barRows.map(r=>r.label==='女性'?'#f74f7e88':r.label==='男性'?'#4285f488':'#aaa88');
+    new Chart(barEl, {
+      data:{ labels:barRows.map(r=>r.label), datasets:[
+        {type:'bar',  label:'花費', data:barRows.map(r=>r.spend), backgroundColor:barColors, borderColor: barColor?'#7aaee8':barRows.map(r=>r.label==='女性'?'#f74f7e':r.label==='男性'?'#4285f4':'#aaa'), borderWidth:1, yAxisID:'y', borderRadius:4, order:2},
+        {type:'line', label:'ROAS', data:barRows.map(r=>r.roas), borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointRadius:4, tension:0.3, yAxisID:'y2', order:1},
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}},
+        scales:{x:{grid:{display:false}}, y:{position:'left',grid:{color:'#f0f0f0'}}, y2:{position:'right',grid:{drawOnChartArea:false}}}
+      }
+    });
+  }
+
+  const combinedAge = combineDemo(
+    metaAgeData.filter(r => r.date_start >= since && r.date_start <= until), 'age', null, gAge, '年齡層'
+  );
+  const combinedGender = combineDemo(
+    metaGenderData.filter(r => r.date_start >= since && r.date_start <= until), 'gender', GDR_MAP, gGender, '性別'
+  );
+
+  if (combinedAge.length)    renderDemoSection(combinedAge,    AGE_ORDER, AGE_EXCL, 'ovAgePie',    'ovAgeBar',    '年齡層', '👥 年齡分析（合計）');
+  if (combinedGender.length) renderDemoSection(combinedGender, null,      AGE_EXCL, 'ovGenderPie', 'ovGenderBar', '性別',   '⚧ 性別分析（合計）');
 }
 
 let gadsTrendChart = null, gadsPieChart = null;
