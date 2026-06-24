@@ -577,9 +577,9 @@ function renderDemographic(ageData, genderData) {
       </tr>`;
     }).join('');
     return `
-      <div style="display:flex;gap:24px;padding:20px;align-items:flex-start">
-        <div style="width:220px;flex-shrink:0"><canvas id="${pieId}"></canvas></div>
-        <div style="flex:1;min-width:0"><canvas id="${barId}"></canvas></div>
+      <div style="display:flex;gap:32px;padding:20px;align-items:flex-start">
+        <div style="width:200px;flex-shrink:0"><canvas id="${pieId}" height="220"></canvas></div>
+        <div style="flex:1;min-width:0"><canvas id="${barId}" height="220"></canvas></div>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
