@@ -160,6 +160,7 @@
   <button class="tab-btn active" onclick="switchTab('perf')">📊 Meta 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
+  <button class="tab-btn" onclick="switchTab('gkw')">🔑 Google 關鍵字</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">
@@ -175,6 +176,11 @@
 
   <!-- Google Ads tab -->
   <div class="tab-panel" id="tab-gads">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
+  <!-- Google 關鍵字 tab -->
+  <div class="tab-panel" id="tab-gkw">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
@@ -300,6 +306,13 @@ async function fetchData(forceRefresh = false) {
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
     renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until);
+    const kwRows = aggRows(filterByDate(gKw, since, until), ['關鍵字']).map(r => {
+      const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
+      const cpa  = r.purchase > 0 ? r.spend/r.purchase : 0;
+      const roas = r.spend > 0 ? r.revenue/r.spend : 0;
+      return { ...r._keys, spend:r.spend, imp:r.imp, clk:r.clk, ctr, purchase:r.purchase, revenue:r.revenue, cpa, roas };
+    });
+    renderGoogleKeyword(kwRows);
     const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
     const isCached  = campJson.cached;
     document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
@@ -875,10 +888,7 @@ function renderGoogleAds(data, since, until) {
         }).join('')}</tbody>
       </table></div>
     </div>
-    <div class="table-card" style="margin-top:20px">
-      <div class="table-header"><h3>🔑 關鍵字成效</h3><span style="font-size:12px;color:#aaa;">${kwRows.length} 組關鍵字</span></div>
-      ${gadsTable(kwRows, [{label:'廣告群組',key:'廣告群組'},{label:'關鍵字',key:'關鍵字'},{label:'比對類型',key:'比對類型'},...metricCols])}
-    </div>`;
+    `;
 
   // 趨勢圖
   if (gadsTrendChart) gadsTrendChart.destroy();
@@ -957,6 +967,51 @@ function renderGoogleAds(data, since, until) {
       options:{ plugins:{title:{display:true,text:'花費 / ROAS（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
     });
   }
+}
+
+function renderGoogleKeyword(kwRows) {
+  const el = document.getElementById('tab-gkw');
+  const cols = [
+    { label:'關鍵字', key:'關鍵字' },
+    { label:'花費', key:'spend' },
+    { label:'曝光', key:'imp', fmt:'N' },
+    { label:'點擊', key:'clk', fmt:'N' },
+    { label:'CTR', key:'ctr', fmt:'P' },
+    { label:'購買', key:'purchase', fmt:'N' },
+    { label:'營收', key:'revenue', fmt:'M' },
+    { label:'CPA', key:'cpa', fmt:'M' },
+    { label:'ROAS', key:'roas', fmt:'R' },
+  ];
+  const top10 = kwRows.slice(0, 10);
+  const rest  = kwRows.slice(10);
+  const maxSpend = kwRows[0]?.spend || 1;
+
+  function rowsHTML(rows) {
+    return rows.map(r => `<tr>${cols.map(c => {
+      if (c.key === 'spend') return `<td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${Math.round(r.spend/maxSpend*60)}px"></div></div></td>`;
+      if (c.fmt === 'M') return `<td>${fmtM(r[c.key]||0)}</td>`;
+      if (c.fmt === 'N') return `<td>${fmtN(r[c.key]||0)}</td>`;
+      if (c.fmt === 'P') return `<td>${fmtP(r[c.key]||0)}</td>`;
+      if (c.fmt === 'R') return `<td class="${rc(r[c.key]||0)}">${(r[c.key]||0)?((+r[c.key]).toFixed(2)+'x'):'<span class="na">—</span>'}</td>`;
+      return `<td>${r[c.key]||'—'}</td>`;
+    }).join('')}</tr>`).join('');
+  }
+
+  el.innerHTML = `
+    <div style="padding:20px">
+      <div class="table-card">
+        <div class="table-header">
+          <h3>🔑 關鍵字成效</h3>
+          <span style="font-size:12px;color:#aaa;">${kwRows.length} 組關鍵字</span>
+        </div>
+        <div class="table-wrap" style="max-height:520px;overflow-y:auto">
+          <table>
+            <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
+            <tbody>${rowsHTML(top10)}${rest.length ? rowsHTML(rest) : ''}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
 }
 
 fetchData();
