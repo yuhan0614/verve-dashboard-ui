@@ -1332,7 +1332,7 @@ function renderGA4(cache, since, until) {
   const scrollTable = (rows, rowFn, hd) => {
     const visH = 10 * rowH + 40;
     return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
-      <table><thead>${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
+      <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
     </div></div>`;
   };
 
