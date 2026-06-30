@@ -1283,11 +1283,15 @@ function renderSholine(json, since, until, trendData, gDaily) {
   const filtered = Object.entries(json)
     .filter(([d]) => d >= since && d <= until)
     .map(([d, v]) => ({
-      date:     d,
-      revenue:  v.gmv || 0,
-      orders:   v.orders || 0,
-      sessions: v.sessions || 0,
-      cvr:      v.cvr || 0,
+      date:      d,
+      gmv:       v.gmv || 0,
+      revenue:   v.revenue || 0,
+      orders:    v.orders || 0,
+      returns:   v.returns || 0,
+      cancelled: v.cancelled || 0,
+      sessions:  v.sessions || 0,
+      cvr:       v.cvr || 0,
+      aov:       v.aov || 0,
     }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
 
@@ -1309,19 +1313,22 @@ function renderSholine(json, since, until, trendData, gDaily) {
   });
 
   const total = filtered.reduce((a,r) => ({
-    revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
+    gmv: a.gmv+r.gmv, revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
+    returns: a.returns+r.returns, cancelled: a.cancelled+r.cancelled,
     sessions: a.sessions+r.sessions, adSpend: a.adSpend+r.adSpend,
-  }), {revenue:0, orders:0, sessions:0, adSpend:0});
-  const aov = total.orders > 0 ? total.revenue/total.orders : 0;
+  }), {gmv:0, revenue:0, orders:0, returns:0, cancelled:0, sessions:0, adSpend:0});
+  const aov = total.orders > 0 ? total.gmv/total.orders : 0;
+  const retCancelPct = total.gmv > 0 ? ((total.returns+total.cancelled)/total.gmv*100).toFixed(1) : '0.0';
 
   document.getElementById('tab-sholine').innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc c-purple"><div class="lbl">成交訂單數</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">Orders</div></div>
-      <div class="sc"><div class="lbl">工作階段</div><div class="val">${total.sessions.toLocaleString()}</div><div class="sub">Sessions</div></div>
-      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 成交訂單</div></div>
+      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.gmv)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc"><div class="lbl">總營業額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">扣除退貨取消</div></div>
+      <div class="sc c-purple"><div class="lbl">總訂單量</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">有效訂單</div></div>
+      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 訂單數</div></div>
+      <div class="sc"><div class="lbl">退貨取消佔比</div><div class="val">${retCancelPct}%</div><div class="sub">退 ${fmtM(total.returns)} / 取 ${fmtM(total.cancelled)}</div></div>
       <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtM(total.adSpend)}</div><div class="sub">Meta + Google</div></div>
-      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${total.adSpend>0?(total.revenue/total.adSpend).toFixed(2)+'x':'—'}</div><div class="sub">成交額 / 廣告花費</div></div>
+      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${total.adSpend>0?(total.gmv/total.adSpend).toFixed(2)+'x':'—'}</div><div class="sub">成交額 / 廣告花費</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
@@ -1331,15 +1338,18 @@ function renderSholine(json, since, until, trendData, gDaily) {
       <div class="table-header"><h3>📋 每日明細</h3></div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>日期</th><th>成交額</th><th>成交訂單</th><th>工作階段</th><th>轉換率</th><th>平均客單價</th><th style="color:#8B5E3C">廣告花費</th><th style="color:#8B5E3C">全站ROAS</th>
+          <th>日期</th><th>成交額</th><th>總營業額</th><th>總訂單量</th><th>平均客單價</th><th>退貨取消佔比</th><th style="color:#8B5E3C">廣告花費</th><th style="color:#8B5E3C">全站ROAS</th>
         </tr></thead>
         <tbody>${filtered.map(r => {
-          const aov = r.orders > 0 ? r.revenue/r.orders : 0;
+          const aov = r.orders > 0 ? r.gmv/r.orders : 0;
+          const pct = r.gmv > 0 ? ((r.returns+r.cancelled)/r.gmv*100).toFixed(1)+'%' : '—';
           return `<tr>
             <td>${r.date}</td>
-            <td>${fmtM(r.revenue)}</td><td>${r.orders.toLocaleString()}</td>
-            <td>${r.sessions.toLocaleString()}</td><td>${(r.cvr*100).toFixed(2)}%</td>
+            <td>${fmtM(r.gmv)}</td>
+            <td>${fmtM(r.revenue)}</td>
+            <td>${r.orders.toLocaleString()}</td>
             <td>${fmtM(aov)}</td>
+            <td>${pct}</td>
             <td style="color:#8B5E3C;font-weight:400">${fmtM(r.adSpend)}</td>
             <td style="color:#8B5E3C;font-weight:400">${r.siteRoas?r.siteRoas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
           </tr>`;
