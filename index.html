@@ -160,6 +160,7 @@
 </div>
 <div class="tabs">
   <button class="tab-btn" onclick="switchTab('sholine')">🛍️ SHOPLINE</button>
+  <button class="tab-btn" onclick="switchTab('ga4')">📈 GA4</button>
   <button class="tab-btn active" onclick="switchTab('overall')">🌐 媒體總成效</button>
   <button class="tab-btn" onclick="switchTab('perf')">📊 Meta 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
@@ -174,6 +175,11 @@
 </div>
 
 <div class="main">
+  <!-- GA4 tab -->
+  <div class="tab-panel" id="tab-ga4">
+    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
+  </div>
+
   <!-- 媒體總成效 tab -->
   <div class="tab-panel active" id="tab-overall">
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
@@ -286,7 +292,7 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
-           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes] = await Promise.all([
+           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${force?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${force?'&force=true':''}`),
@@ -301,6 +307,7 @@ async function fetchData(forceRefresh = false) {
       fetch(GADS_CSV.adgroup),
       fetch(GADS_CSV.keyword),
       fetch(SHOLINE_JSON),
+      fetch('./ga4_cache.json'),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
@@ -320,8 +327,10 @@ async function fetchData(forceRefresh = false) {
     const gAg     = parseCSV(await gAgRes.text());
     const gKw     = parseCSV(await gKwRes.text());
     const sholineJson = await sholineRes.json();
+    const ga4Cache    = await ga4Res.json();
 
     renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
+    renderGA4(ga4Cache, since, until);
     renderSholine(sholineJson, since, until, trendData, gDaily);
     renderPerf(campData, trendData, since, until);
     renderCreative();
@@ -1275,6 +1284,80 @@ function renderGoogleKeyword(kwRows) {
           </table>
         </div>
       </div>
+    </div>`;
+}
+
+// ── GA4 ──────────────────────────────────────────────────────
+function renderGA4(cache, since, until) {
+  const fmt  = n => Number(n||0).toLocaleString('en');
+  const fmtR = n => 'NT$' + Math.round(n||0).toLocaleString('en');
+  const fmtS = s => { const v=parseFloat(s||0); const m=Math.floor(v/60); return `${m}:${String(Math.round(v%60)).padStart(2,'0')}`; };
+  const fmtB = v => (parseFloat(v||0)*100).toFixed(1)+'%';
+
+  const sinceD = since.replace(/-/g,'');
+  const untilD = until.replace(/-/g,'');
+
+  // Daily - filter by date range
+  const daily = (cache.daily||[])
+    .filter(r => r.date >= sinceD && r.date <= untilD)
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  // Channels & source/medium - GA4 API returns full range, filter not needed (already queried with date range at export time)
+  const channels = (cache.channels||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
+  const srcmed   = (cache.source_medium||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
+
+  const thead = `<tr><th>日期</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
+  const chead = `<tr><th>管道</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
+  const shead = `<tr><th>來源／媒介</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
+
+  const dRow = r => `<tr>
+    <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
+    <td>${fmt(r.sessions)}</td><td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
+    <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
+  </tr>`;
+
+  const cRow = r => `<tr>
+    <td>${r.sessionDefaultChannelGrouping||'—'}</td>
+    <td>${fmt(r.sessions)}</td><td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
+    <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
+  </tr>`;
+
+  const sRow = r => `<tr>
+    <td>${r.sessionSourceMedium||'—'}</td>
+    <td>${fmt(r.sessions)}</td><td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
+    <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
+  </tr>`;
+
+  const expandTable = (rows, rowFn, id) => {
+    const init = 10;
+    const more = rows.length - init;
+    return `
+      <div class="table-wrap"><table>
+        <thead>${rows.length>0 ? (rowFn===dRow?thead:rowFn===cRow?chead:shead) : ''}</thead>
+        <tbody id="${id}-body">${rows.slice(0,init).map(rowFn).join('')}</tbody>
+      </table></div>
+      ${more>0 ? `<div style="text-align:right;margin-top:6px">
+        <a href="#" style="font-size:12px;color:#1677ff" onclick="(function(e){e.preventDefault();
+          const b=document.getElementById('${id}-body');
+          const all=${JSON.stringify(rows.slice(init).map(rowFn))};
+          all.forEach(h=>{const tr=document.createElement('tr');tr.innerHTML=h.replace(/<\\/?tr>/g,'');b.appendChild(tr)});
+          e.target.parentNode.remove();
+        })(event)">展開剩餘 ${more} 列 ▼</a>
+      </div>` : ''}`;
+  };
+
+  document.getElementById('tab-ga4').innerHTML = `
+    <div class="table-card">
+      <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
+      ${expandTable(daily, dRow, 'ga4-daily')}
+    </div>
+    <div class="table-card" style="margin-top:14px">
+      <div class="table-header"><h3>📡 分管道</h3></div>
+      ${expandTable(channels, cRow, 'ga4-ch')}
+    </div>
+    <div class="table-card" style="margin-top:14px">
+      <div class="table-header"><h3>🔗 分來源媒介</h3></div>
+      ${expandTable(srcmed, sRow, 'ga4-sm')}
     </div>`;
 }
 
