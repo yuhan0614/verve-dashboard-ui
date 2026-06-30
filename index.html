@@ -1307,8 +1307,8 @@ function renderGA4(cache, since, until) {
   const srcmed   = (cache.source_medium||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
 
   const thead = `<tr><th>日期</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
-  const chead = `<tr><th>管道</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
-  const shead = `<tr><th>來源／媒介</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
+  const chead = `<tr><th>管道</th><th>工作階段</th><th>工作階段%</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>營收%</th><th>平均停留</th><th>跳出率</th></tr>`;
+  const shead = `<tr><th>來源／媒介</th><th>工作階段</th><th>工作階段%</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>營收%</th><th>平均停留</th><th>跳出率</th></tr>`;
 
   const dRow = r => `<tr>
     <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
@@ -1316,16 +1316,27 @@ function renderGA4(cache, since, until) {
     <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
   </tr>`;
 
+  const totalChSess = channels.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
+  const totalChRev  = channels.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+  const totalSmSess = srcmed.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
+  const totalSmRev  = srcmed.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+
+  const pct = (v, total) => total > 0 ? (parseFloat(v||0)/total*100).toFixed(1)+'%' : '—';
+
   const cRow = r => `<tr>
     <td>${r.sessionDefaultChannelGrouping||'—'}</td>
-    <td>${fmt(r.sessions)}</td><td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
-    <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
+    <td>${fmt(r.sessions)}</td><td style="color:#888">${pct(r.sessions,totalChSess)}</td>
+    <td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
+    <td>${fmtR(r.totalRevenue)}</td><td style="color:#888">${pct(r.totalRevenue,totalChRev)}</td>
+    <td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
   </tr>`;
 
   const sRow = r => `<tr>
     <td>${r.sessionSourceMedium||'—'}</td>
-    <td>${fmt(r.sessions)}</td><td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
-    <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
+    <td>${fmt(r.sessions)}</td><td style="color:#888">${pct(r.sessions,totalSmSess)}</td>
+    <td>${fmt(r.addToCarts)}</td><td>${fmt(r.conversions)}</td>
+    <td>${fmtR(r.totalRevenue)}</td><td style="color:#888">${pct(r.totalRevenue,totalSmRev)}</td>
+    <td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
   </tr>`;
 
   const rowH = 38;
