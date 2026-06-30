@@ -1328,36 +1328,26 @@ function renderGA4(cache, since, until) {
     <td>${fmtR(r.totalRevenue)}</td><td>${fmtS(r.averageSessionDuration)}</td><td>${fmtB(r.bounceRate)}</td>
   </tr>`;
 
-  const expandTable = (rows, rowFn, id) => {
-    const init = 10;
-    const more = rows.length - init;
-    return `
-      <div class="table-wrap"><table>
-        <thead>${rows.length>0 ? (rowFn===dRow?thead:rowFn===cRow?chead:shead) : ''}</thead>
-        <tbody id="${id}-body">${rows.slice(0,init).map(rowFn).join('')}</tbody>
-      </table></div>
-      ${more>0 ? `<div style="text-align:right;margin-top:6px">
-        <a href="#" style="font-size:12px;color:#1677ff" onclick="(function(e){e.preventDefault();
-          const b=document.getElementById('${id}-body');
-          const all=${JSON.stringify(rows.slice(init).map(rowFn))};
-          all.forEach(h=>{const tr=document.createElement('tr');tr.innerHTML=h.replace(/<\\/?tr>/g,'');b.appendChild(tr)});
-          e.target.parentNode.remove();
-        })(event)">展開剩餘 ${more} 列 ▼</a>
-      </div>` : ''}`;
+  const rowH = 38;
+  const scrollTable = (rows, rowFn, hd) => {
+    const visH = 10 * rowH + 40;
+    return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
+      <table><thead>${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
+    </div></div>`;
   };
 
   document.getElementById('tab-ga4').innerHTML = `
     <div class="table-card">
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
-      ${expandTable(daily, dRow, 'ga4-daily')}
+      ${scrollTable(daily, dRow, thead)}
     </div>
     <div class="table-card" style="margin-top:14px">
       <div class="table-header"><h3>📡 分管道</h3></div>
-      ${expandTable(channels, cRow, 'ga4-ch')}
+      ${scrollTable(channels, cRow, chead)}
     </div>
     <div class="table-card" style="margin-top:14px">
       <div class="table-header"><h3>🔗 分來源媒介</h3></div>
-      ${expandTable(srcmed, sRow, 'ga4-sm')}
+      ${scrollTable(srcmed, sRow, shead)}
     </div>`;
 }
 
