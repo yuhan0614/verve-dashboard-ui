@@ -1302,9 +1302,30 @@ function renderGA4(cache, since, until) {
     .filter(r => r.date >= sinceD && r.date <= untilD)
     .sort((a,b) => b.date.localeCompare(a.date));
 
-  // Channels & source/medium - GA4 API returns full range, filter not needed (already queried with date range at export time)
-  const channels = (cache.channels||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
-  const srcmed   = (cache.source_medium||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
+  // Channels: aggregate daily_channels filtered by date range
+  const chMap = {};
+  (cache.daily_channels||[])
+    .filter(r => r.date >= sinceD && r.date <= untilD)
+    .forEach(r => {
+      const k = r.sessionDefaultChannelGrouping||'(other)';
+      if (!chMap[k]) chMap[k] = {sessionDefaultChannelGrouping:k,sessions:0,addToCarts:0,conversions:0,totalRevenue:0,_dur:0,_bRate:0,_n:0};
+      const m = chMap[k];
+      m.sessions   += parseFloat(r.sessions||0);
+      m.addToCarts += parseFloat(r.addToCarts||0);
+      m.conversions+= parseFloat(r.conversions||0);
+      m.totalRevenue+=parseFloat(r.totalRevenue||0);
+      m._dur  += parseFloat(r.averageSessionDuration||0);
+      m._bRate+= parseFloat(r.bounceRate||0);
+      m._n++;
+    });
+  Object.values(chMap).forEach(m => {
+    m.averageSessionDuration = m._n ? m._dur/m._n : 0;
+    m.bounceRate = m._n ? m._bRate/m._n : 0;
+  });
+  const channels = Object.values(chMap).sort((a,b) => b.sessions - a.sessions);
+
+  // Source/medium: all-period aggregate (too large for per-day storage)
+  const srcmed = (cache.source_medium||[]).sort((a,b) => parseFloat(b.sessions||0)-parseFloat(a.sessions||0));
 
   const thead = `<tr><th>日期</th><th>工作階段</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>平均停留</th><th>跳出率</th></tr>`;
   const chead = `<tr><th>管道</th><th>工作階段</th><th>工作階段%</th><th>加入購物車</th><th>購買</th><th>全站營收</th><th>營收%</th><th>平均停留</th><th>跳出率</th></tr>`;
