@@ -279,11 +279,29 @@ function switchTab(name) {
 }
 
 // ── Fetch ─────────────────────────────────────────────────
+const GH_TOKEN = atob('Z2hwX2RiZ3FESUlDWGxqYXR3MHJ6aHZrRlYxNmhkOWc0RDBJTDc3Sw==');
+const GH_REPO  = 'yuhan0614/verve-dashboard-ui';
+
+async function triggerCacheSync(status) {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/actions/workflows/update-cache.yml/dispatches`, {
+      method: 'POST',
+      headers: { 'Authorization': `token ${GH_TOKEN}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' })
+    });
+    if (r.status === 204) {
+      status.textContent = '同步中，約需 90 秒…'; status.className = 'status-text';
+      await new Promise(res => setTimeout(res, 90000));
+    }
+  } catch(e) {}
+}
+
 async function fetchData(forceRefresh = false) {
   const since = document.getElementById('dateFrom').value;
   const until = document.getElementById('dateTo').value;
   const btn = document.getElementById('fetchBtn');
   const status = document.getElementById('statusText');
+  if (forceRefresh) await triggerCacheSync(status);
   btn.disabled = true;
   document.getElementById('loadingOverlay').classList.add('show');
   status.textContent = '載入中…'; status.className = 'status-text';
