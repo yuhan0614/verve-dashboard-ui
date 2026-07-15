@@ -328,7 +328,7 @@ async function fetchData(forceRefresh = false) {
     const ga4Cache    = await ga4Res.json();
 
     renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
-    renderGA4(ga4Cache, since, until);
+    renderGA4(ga4Cache, since, until, trendData, gDaily);
     renderSholine(sholineJson, since, until, trendData, gDaily);
     renderPerf(campData, trendData, since, until);
     renderCreative();
@@ -1286,7 +1286,8 @@ function renderGoogleKeyword(kwRows) {
 }
 
 // ── GA4 ──────────────────────────────────────────────────────
-function renderGA4(cache, since, until) {
+let ga4TrendChart = null;
+function renderGA4(cache, since, until, trendData, gDaily) {
   const fmt  = n => Number(n||0).toLocaleString('en');
   const fmtR = n => 'NT$' + Math.round(n||0).toLocaleString('en');
   const fmtS = s => { const v=parseFloat(s||0); const m=Math.floor(v/60); return `${m}:${String(Math.round(v%60)).padStart(2,'0')}`; };
@@ -1295,10 +1296,11 @@ function renderGA4(cache, since, until) {
   const sinceD = since.replace(/-/g,'');
   const untilD = until.replace(/-/g,'');
 
-  // Daily - filter by date range
-  const daily = (cache.daily||[])
+  // Daily - filter by date range (ascending for chart, descending for table)
+  const dailyAsc = (cache.daily||[])
     .filter(r => r.date >= sinceD && r.date <= untilD)
-    .sort((a,b) => b.date.localeCompare(a.date));
+    .sort((a,b) => a.date.localeCompare(b.date));
+  const daily = [...dailyAsc].reverse();
 
   // Channels: aggregate daily_channels filtered by date range
   const chMap = {};
@@ -1355,6 +1357,26 @@ function renderGA4(cache, since, until) {
     <td ${R}>${fmtR(r.totalRevenue)}</td><td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
   </tr>`;
 
+  // Summary totals
+  const totalSess  = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
+  const totalATC   = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
+  const totalConv  = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
+  const totalRev   = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+
+  // Ad spend per day (Meta + Google)
+  const metaSpendMap = {};
+  (trendData||[]).forEach(r => { if (r.date_start) metaSpendMap[r.date_start] = (metaSpendMap[r.date_start]||0)+(r.spend||0); });
+  const gSpendMap = {};
+  (gDaily||[]).forEach(r => { if (r['日期']) gSpendMap[r['日期']] = (gSpendMap[r['日期']]||0)+(parseFloat(r['花費(TWD)'])||0); });
+
+  const chartRows = dailyAsc.map(r => {
+    const d = r.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
+    const adSpend = (metaSpendMap[d]||0) + (gSpendMap[d]||0);
+    return { d, sessions: parseFloat(r.sessions||0), revenue: parseFloat(r.totalRevenue||0), siteRoas: adSpend > 0 ? parseFloat(r.totalRevenue||0)/adSpend : 0, adSpend };
+  });
+  const totalAdSpend = chartRows.reduce((s,r)=>s+r.adSpend, 0);
+  const siteRoas = totalAdSpend > 0 ? totalRev/totalAdSpend : 0;
+
   const totalChSess = channels.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalChRev  = channels.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
   const totalSmSess = srcmed.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
@@ -1395,6 +1417,18 @@ function renderGA4(cache, since, until) {
   };
 
   document.getElementById('tab-ga4').innerHTML = `
+    <div class="summary-grid">
+      <div class="sc c-purple"><div class="lbl">工作階段</div><div class="val">${fmt(totalSess)}</div><div class="sub">${since} ～ ${until}</div></div>
+      <div class="sc c-orange"><div class="lbl">加入購物車</div><div class="val">${fmt(totalATC)}</div></div>
+      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${fmt(totalConv)}</div></div>
+      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtR(totalRev)}</div></div>
+      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtR(totalAdSpend)}</div><div class="sub">Meta + Google</div></div>
+      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas.toFixed(2)}x</div><div class="sub">營收 / 廣告花費</div></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:20px">
+      <h3>📅 每日趨勢</h3>
+      <div style="position:relative;height:260px"><canvas id="ga4TrendChart"></canvas></div>
+    </div>
     <div class="table-card">
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
       ${scrollTable(daily, dRow, thead)}
@@ -1407,6 +1441,24 @@ function renderGA4(cache, since, until) {
       <div class="table-header"><h3>🔗 分來源媒介</h3></div>
       ${scrollTable(srcmed, sRow, shead)}
     </div>`;
+
+  if (ga4TrendChart) ga4TrendChart.destroy();
+  ga4TrendChart = new Chart(document.getElementById('ga4TrendChart'), {
+    data: { labels: chartRows.map(r=>r.d), datasets: [
+      { type:'bar',  label:'工作階段', data: chartRows.map(r=>r.sessions), backgroundColor:'rgba(99,102,241,0.3)', borderColor:'#6366f1', borderWidth:1, borderRadius:3, yAxisID:'y', order:3 },
+      { type:'line', label:'營收',     data: chartRows.map(r=>r.revenue),  borderColor:'#10b981', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y2', order:2 },
+      { type:'line', label:'全站ROAS', data: chartRows.map(r=>r.siteRoas), borderColor:'#e8833a', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'y3', order:1 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
+      scales: {
+        x:  { grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:14} },
+        y:  { position:'left',  beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v} },
+        y2: { position:'right', beginAtZero:true, grid:{display:false},   ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
+        y3: { display:false, beginAtZero:true },
+      }
+    }
+  });
 }
 
 let sholineTrendChart = null;
