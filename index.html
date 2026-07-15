@@ -288,9 +288,11 @@ async function fetchData(forceRefresh = false) {
   document.getElementById('loadingOverlay').classList.add('show');
   status.textContent = '載入中…'; status.className = 'status-text';
 
+  const prev = calcPrevDates(since, until);
+
   try {
     const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
-           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res] = await Promise.all([
+           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res, prevTrendRes] = await Promise.all([
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${forceRefresh?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${forceRefresh?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${forceRefresh?'&force=true':''}`),
@@ -306,6 +308,7 @@ async function fetchData(forceRefresh = false) {
       fetch(GADS_CSV.keyword),
       fetch(SHOLINE_JSON),
       fetch('./ga4_cache.json'),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${prev.since}&until=${prev.until}&level=account&time_increment=1`),
     ]);
     const campJson  = await campRes.json();
     const trendJson = await trendRes.json();
@@ -324,16 +327,17 @@ async function fetchData(forceRefresh = false) {
     const gLoc    = parseCSV(await gLocRes.text());
     const gAg     = parseCSV(await gAgRes.text());
     const gKw     = parseCSV(await gKwRes.text());
-    const sholineJson = await sholineRes.json();
-    const ga4Cache    = await ga4Res.json();
+    const sholineJson  = await sholineRes.json();
+    const ga4Cache     = await ga4Res.json();
+    const prevTrendData = (await prevTrendRes.json()).data || [];
 
-    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender);
-    renderGA4(ga4Cache, since, until, trendData, gDaily);
-    renderSholine(sholineJson, since, until, trendData, gDaily);
-    renderPerf(campData, trendData, since, until);
+    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender, prevTrendData, prev);
+    renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
+    renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData);
+    renderPerf(campData, trendData, since, until, prevTrendData);
     renderCreative();
     renderDemographic(ageJson.data || [], genderJson.data || []);
-    renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until);
+    renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until, prev);
     const kwRows = aggRows(filterByDate(gKw, since, until), ['關鍵字']).map(r => {
       const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
       const cpa  = r.purchase > 0 ? r.spend/r.purchase : 0;
@@ -362,8 +366,24 @@ function fmtM(n) { if (!n && n !== 0) return '<span class="na">—</span>'; retu
 function fmtP(n) { if (n == null) return '<span class="na">—</span>'; return (+n).toFixed(2)+'%'; }
 function rc(r) { return r >= 10 ? 'roas-high' : r >= 3 ? 'roas-mid' : 'roas-low'; }
 
+function diffBadge(curr, prev, inverse = false) {
+  if (!prev) return '<span style="font-size:11px;color:#ccc">—</span>';
+  const pct = (curr - prev) / Math.abs(prev) * 100;
+  const sign = pct > 0 ? '+' : '';
+  const good = inverse ? pct <= 0 : pct >= 0;
+  const color = good ? '#52c41a' : '#f5222d';
+  return `<span style="font-size:11px;color:${color};font-weight:500">${sign}${pct.toFixed(1)}% vs 前期</span>`;
+}
+
+function calcPrevDates(since, until) {
+  const days = Math.round((new Date(until) - new Date(since)) / 86400000) + 1;
+  const pu = new Date(since); pu.setDate(pu.getDate() - 1);
+  const ps = new Date(pu); ps.setDate(ps.getDate() - days + 1);
+  return { since: toYMD(ps), until: toYMD(pu) };
+}
+
 // ── Perf Tab ──────────────────────────────────────────────
-function renderPerf(camps, trend, since, until) {
+function renderPerf(camps, trend, since, until, prevTrendData) {
   const total = camps.reduce((a,r) => ({
     spend: a.spend+(r.spend||0), impressions: a.impressions+(r.impressions||0),
     link_clicks: a.link_clicks+(r.link_clicks||0), add_to_cart: a.add_to_cart+(r.add_to_cart||0),
@@ -374,16 +394,24 @@ function renderPerf(camps, trend, since, until) {
   const sorted = [...camps].sort((a,b)=>(b.spend||0)-(a.spend||0));
   const maxSpend = sorted[0]?.spend || 1;
 
+  const pt = (prevTrendData||[]).reduce((a,r) => ({
+    spend: a.spend+(r.spend||0), impressions: a.impressions+(r.impressions||0),
+    link_clicks: a.link_clicks+(r.link_clicks||0), add_to_cart: a.add_to_cart+(r.add_to_cart||0),
+    purchase: a.purchase+(r.purchase||0), purchase_value: a.purchase_value+(r.purchase_value||0),
+  }), {spend:0,impressions:0,link_clicks:0,add_to_cart:0,purchase:0,purchase_value:0});
+  const prevRoas = pt.spend > 0 ? pt.purchase_value/pt.spend : 0;
+  const prevCpa  = pt.purchase > 0 ? pt.spend/pt.purchase : 0;
+
   document.getElementById('tab-perf').innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc"><div class="lbl">曝光</div><div class="val">${(total.impressions/10000).toFixed(1)}萬</div><div class="sub">${total.impressions.toLocaleString()}</div></div>
-      <div class="sc c-purple"><div class="lbl">連結點擊</div><div class="val">${total.link_clicks.toLocaleString()}</div><div class="sub">Link Clicks</div></div>
-      <div class="sc c-orange"><div class="lbl">加入購物車</div><div class="val">${Math.round(total.add_to_cart).toLocaleString()}</div><div class="sub">Add to Cart</div></div>
-      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">Purchase</div></div>
-      <div class="sc c-pink"><div class="lbl">轉換值</div><div class="val">${fmtM(total.purchase_value)}</div><div class="sub">Purchase Value</div></div>
-      <div class="sc c-green"><div class="lbl">ROAS</div><div class="val">${roas.toFixed(2)}x</div><div class="sub">轉換值 / 花費</div></div>
-      <div class="sc"><div class="lbl">CPA（購買）</div><div class="val">${fmtM(cpa)}</div><div class="sub">Cost per Purchase</div></div>
+      <div class="sc c-blue"><div class="lbl">花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${diffBadge(total.spend,pt.spend)}</div></div>
+      <div class="sc"><div class="lbl">曝光</div><div class="val">${(total.impressions/10000).toFixed(1)}萬</div><div class="sub">${diffBadge(total.impressions,pt.impressions)}</div></div>
+      <div class="sc c-purple"><div class="lbl">連結點擊</div><div class="val">${total.link_clicks.toLocaleString()}</div><div class="sub">${diffBadge(total.link_clicks,pt.link_clicks)}</div></div>
+      <div class="sc c-orange"><div class="lbl">加入購物車</div><div class="val">${Math.round(total.add_to_cart).toLocaleString()}</div><div class="sub">${diffBadge(total.add_to_cart,pt.add_to_cart)}</div></div>
+      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">${diffBadge(total.purchase,pt.purchase)}</div></div>
+      <div class="sc c-pink"><div class="lbl">轉換值</div><div class="val">${fmtM(total.purchase_value)}</div><div class="sub">${diffBadge(total.purchase_value,pt.purchase_value)}</div></div>
+      <div class="sc c-green"><div class="lbl">ROAS</div><div class="val">${roas.toFixed(2)}x</div><div class="sub">${diffBadge(roas,prevRoas)}</div></div>
+      <div class="sc"><div class="lbl">CPA（購買）</div><div class="val">${fmtM(cpa)}</div><div class="sub">${diffBadge(cpa,prevCpa,true)}</div></div>
     </div>
     <div class="charts-row">
       <div class="chart-card">
@@ -800,7 +828,7 @@ function gadsTable(rows, cols) {
 
 // ── 媒體總成效 Tab ─────────────────────────────────────────
 let overallAgePie=null,overallAgeBar=null,overallGenderPie=null,overallGenderBar=null;
-function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender) {
+function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender, prevTrendData, prev) {
   const el = document.getElementById('tab-overall');
 
   // Meta daily totals
@@ -834,6 +862,18 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   total.roas = total.spend > 0 ? total.revenue/total.spend : 0;
   total.cpa  = total.purchase > 0 ? total.spend/total.purchase : 0;
 
+  // Prev period
+  const prevMeta = (prevTrendData||[]).reduce((a,r) => ({
+    spend: a.spend+(r.spend||0), purchase: a.purchase+(r.purchase||0), revenue: a.revenue+(r.purchase_value||0),
+  }), {spend:0,purchase:0,revenue:0});
+  const prevGDays = filterByDate(gDaily, prev.since, prev.until);
+  const prevGads = prevGDays.reduce((a,r) => ({
+    spend: a.spend+(parseFloat(r['花費(TWD)'])||0), purchase: a.purchase+(parseFloat(r['購買'])||0), revenue: a.revenue+(parseFloat(r['營收(TWD)'])||0),
+  }), {spend:0,purchase:0,revenue:0});
+  const prevTotal = { spend: prevMeta.spend+prevGads.spend, purchase: prevMeta.purchase+prevGads.purchase, revenue: prevMeta.revenue+prevGads.revenue };
+  prevTotal.roas = prevTotal.spend > 0 ? prevTotal.revenue/prevTotal.spend : 0;
+  prevTotal.cpa  = prevTotal.purchase > 0 ? prevTotal.spend/prevTotal.purchase : 0;
+
   // Trend: align dates, compute daily total spend + ROAS
   const metaByDate = {};
   metaDays.forEach(r => { metaByDate[r.date_start] = { spend: r.spend||0, revenue: r.purchase_value||0 }; });
@@ -849,13 +889,13 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
 
   el.innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">合計花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc" style="background:#fff7e6"><div class="lbl">Meta 花費</div><div class="val" style="color:#1877f2">${fmtM(meta.spend)}</div><div class="sub">${total.spend>0?(meta.spend/total.spend*100).toFixed(1)+'%':''}</div></div>
-      <div class="sc" style="background:#f0f9ff"><div class="lbl">Google 花費</div><div class="val" style="color:#34a853">${fmtM(gads.spend)}</div><div class="sub">${total.spend>0?(gads.spend/total.spend*100).toFixed(1)+'%':''}</div></div>
-      <div class="sc c-teal"><div class="lbl">合計購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">Conversions</div></div>
-      <div class="sc c-pink"><div class="lbl">合計營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">Revenue</div></div>
-      <div class="sc c-green"><div class="lbl">合計 ROAS</div><div class="val">${total.roas.toFixed(2)}x</div><div class="sub">營收 / 花費</div></div>
-      <div class="sc"><div class="lbl">合計 CPA</div><div class="val">${fmtM(total.cpa)}</div><div class="sub">Cost per Purchase</div></div>
+      <div class="sc c-blue"><div class="lbl">合計花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${diffBadge(total.spend,prevTotal.spend)}</div></div>
+      <div class="sc" style="background:#fff7e6"><div class="lbl">Meta 花費</div><div class="val" style="color:#1877f2">${fmtM(meta.spend)}</div><div class="sub">${diffBadge(meta.spend,prevMeta.spend)}</div></div>
+      <div class="sc" style="background:#f0f9ff"><div class="lbl">Google 花費</div><div class="val" style="color:#34a853">${fmtM(gads.spend)}</div><div class="sub">${diffBadge(gads.spend,prevGads.spend)}</div></div>
+      <div class="sc c-teal"><div class="lbl">合計購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">${diffBadge(total.purchase,prevTotal.purchase)}</div></div>
+      <div class="sc c-pink"><div class="lbl">合計營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,prevTotal.revenue)}</div></div>
+      <div class="sc c-green"><div class="lbl">合計 ROAS</div><div class="val">${total.roas.toFixed(2)}x</div><div class="sub">${diffBadge(total.roas,prevTotal.roas)}</div></div>
+      <div class="sc"><div class="lbl">合計 CPA</div><div class="val">${fmtM(total.cpa)}</div><div class="sub">${diffBadge(total.cpa,prevTotal.cpa,true)}</div></div>
     </div>
     <div class="charts-row">
       <div class="chart-card">
@@ -1022,7 +1062,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
 
 let gadsTrendChart = null, gadsPieChart = null;
 
-function renderGoogleAds(data, since, until) {
+function renderGoogleAds(data, since, until, prev) {
   gadsData = data;
   const el = document.getElementById('tab-gads');
 
@@ -1088,6 +1128,17 @@ function renderGoogleAds(data, since, until) {
   const totalRoas = total.spend > 0 ? total.revenue/total.spend : 0;
   const totalCpc  = total.clk > 0 ? total.spend/total.clk : 0;
 
+  // 前同期
+  const prevGDaily = filterByDate(data.daily, prev.since, prev.until);
+  const pt = prevGDaily.reduce((a,r) => ({
+    spend: a.spend+(parseFloat(r['花費(TWD)'])||0), imp: a.imp+(parseInt(r['曝光'])||0),
+    clk: a.clk+(parseInt(r['點擊'])||0), purchase: a.purchase+(parseFloat(r['購買'])||0),
+    revenue: a.revenue+(parseFloat(r['營收(TWD)'])||0),
+  }), {spend:0,imp:0,clk:0,purchase:0,revenue:0});
+  const ptCtr  = pt.imp > 0 ? pt.clk/pt.imp*100 : 0;
+  const ptCpa  = pt.purchase > 0 ? pt.spend/pt.purchase : 0;
+  const ptRoas = pt.spend > 0 ? pt.revenue/pt.spend : 0;
+
   const campSorted = [...campRows].sort((a,b) => b.spend-a.spend);
   const maxCampSpend = campSorted[0]?.spend || 1;
 
@@ -1095,14 +1146,14 @@ function renderGoogleAds(data, since, until) {
 
   el.innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc"><div class="lbl">曝光</div><div class="val">${(total.imp/10000).toFixed(1)}萬</div><div class="sub">${total.imp.toLocaleString()}</div></div>
-      <div class="sc c-purple"><div class="lbl">點擊</div><div class="val">${total.clk.toLocaleString()}</div><div class="sub">Clicks</div></div>
-      <div class="sc c-orange"><div class="lbl">CTR</div><div class="val">${totalCtr.toFixed(2)}%</div><div class="sub">點擊率</div></div>
-      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">Conversions</div></div>
-      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">Revenue</div></div>
-      <div class="sc c-green"><div class="lbl">ROAS</div><div class="val">${totalRoas.toFixed(2)}x</div><div class="sub">營收 / 花費</div></div>
-      <div class="sc"><div class="lbl">CPA（購買）</div><div class="val">${fmtM(totalCpa)}</div><div class="sub">Cost per Purchase</div></div>
+      <div class="sc c-blue"><div class="lbl">花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${diffBadge(total.spend,pt.spend)}</div></div>
+      <div class="sc"><div class="lbl">曝光</div><div class="val">${(total.imp/10000).toFixed(1)}萬</div><div class="sub">${diffBadge(total.imp,pt.imp)}</div></div>
+      <div class="sc c-purple"><div class="lbl">點擊</div><div class="val">${total.clk.toLocaleString()}</div><div class="sub">${diffBadge(total.clk,pt.clk)}</div></div>
+      <div class="sc c-orange"><div class="lbl">CTR</div><div class="val">${totalCtr.toFixed(2)}%</div><div class="sub">${diffBadge(totalCtr,ptCtr)}</div></div>
+      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">${diffBadge(total.purchase,pt.purchase)}</div></div>
+      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,pt.revenue)}</div></div>
+      <div class="sc c-green"><div class="lbl">ROAS</div><div class="val">${totalRoas.toFixed(2)}x</div><div class="sub">${diffBadge(totalRoas,ptRoas)}</div></div>
+      <div class="sc"><div class="lbl">CPA（購買）</div><div class="val">${fmtM(totalCpa)}</div><div class="sub">${diffBadge(totalCpa,ptCpa,true)}</div></div>
     </div>
     <div class="charts-row">
       <div class="chart-card">
@@ -1287,7 +1338,7 @@ function renderGoogleKeyword(kwRows) {
 
 // ── GA4 ──────────────────────────────────────────────────────
 let ga4TrendChart = null;
-function renderGA4(cache, since, until, trendData, gDaily) {
+function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) {
   const fmt  = n => Number(n||0).toLocaleString('en');
   const fmtR = n => 'NT$' + Math.round(n||0).toLocaleString('en');
   const fmtS = s => { const v=parseFloat(s||0); const m=Math.floor(v/60); return `${m}:${String(Math.round(v%60)).padStart(2,'0')}`; };
@@ -1377,6 +1428,19 @@ function renderGA4(cache, since, until, trendData, gDaily) {
   const totalAdSpend = chartRows.reduce((s,r)=>s+r.adSpend, 0);
   const siteRoas = totalAdSpend > 0 ? totalRev/totalAdSpend : 0;
 
+  // 前同期
+  const prevSinceD = prev.since.replace(/-/g,'');
+  const prevUntilD = prev.until.replace(/-/g,'');
+  const prevDailyAsc = (cache.daily||[]).filter(r => r.date >= prevSinceD && r.date <= prevUntilD);
+  const prevSess = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
+  const prevATC  = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
+  const prevConv = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
+  const prevRev  = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+  const prevMetaSpend = (prevTrendData||[]).reduce((s,r)=>s+(r.spend||0),0);
+  const prevGSpend = filterByDate(gDaily, prev.since, prev.until).reduce((s,r)=>s+(parseFloat(r['花費(TWD)'])||0),0);
+  const prevAdSpend = prevMetaSpend + prevGSpend;
+  const prevSiteRoas = prevAdSpend > 0 ? prevRev/prevAdSpend : 0;
+
   const totalChSess = channels.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalChRev  = channels.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
   const totalSmSess = srcmed.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
@@ -1418,12 +1482,12 @@ function renderGA4(cache, since, until, trendData, gDaily) {
 
   document.getElementById('tab-ga4').innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-purple"><div class="lbl">工作階段</div><div class="val">${fmt(totalSess)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc c-orange"><div class="lbl">加入購物車</div><div class="val">${fmt(totalATC)}</div></div>
-      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${fmt(totalConv)}</div></div>
-      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtR(totalRev)}</div></div>
-      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtR(totalAdSpend)}</div><div class="sub">Meta + Google</div></div>
-      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas.toFixed(2)}x</div><div class="sub">營收 / 廣告花費</div></div>
+      <div class="sc c-purple"><div class="lbl">工作階段</div><div class="val">${fmt(totalSess)}</div><div class="sub">${diffBadge(totalSess,prevSess)}</div></div>
+      <div class="sc c-orange"><div class="lbl">加入購物車</div><div class="val">${fmt(totalATC)}</div><div class="sub">${diffBadge(totalATC,prevATC)}</div></div>
+      <div class="sc c-teal"><div class="lbl">購買</div><div class="val">${fmt(totalConv)}</div><div class="sub">${diffBadge(totalConv,prevConv)}</div></div>
+      <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtR(totalRev)}</div><div class="sub">${diffBadge(totalRev,prevRev)}</div></div>
+      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtR(totalAdSpend)}</div><div class="sub">${diffBadge(totalAdSpend,prevAdSpend)}</div></div>
+      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas.toFixed(2)}x</div><div class="sub">${diffBadge(siteRoas,prevSiteRoas)}</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
@@ -1462,21 +1526,14 @@ function renderGA4(cache, since, until, trendData, gDaily) {
 }
 
 let sholineTrendChart = null;
-function renderSholine(json, since, until, trendData, gDaily) {
-  const filtered = Object.entries(json)
-    .filter(([d]) => d >= since && d <= until)
-    .map(([d, v]) => ({
-      date:      d,
-      gmv:       v.gmv || 0,
-      revenue:   v.revenue || 0,
-      orders:    v.orders || 0,
-      returns:   v.returns || 0,
-      cancelled: v.cancelled || 0,
-      sessions:  v.sessions || 0,
-      cvr:       v.cvr || 0,
-      aov:       v.aov || 0,
-    }))
+function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendData) {
+  const mapEntries = (s, u) => Object.entries(json)
+    .filter(([d]) => d >= s && d <= u)
+    .map(([d, v]) => ({ date:d, gmv:v.gmv||0, revenue:v.revenue||0, orders:v.orders||0, returns:v.returns||0, cancelled:v.cancelled||0, sessions:v.sessions||0, cvr:v.cvr||0, aov:v.aov||0 }))
     .sort((a,b) => a.date > b.date ? 1 : -1);
+
+  const filtered = mapEntries(since, until);
+  const prevFiltered = mapEntries(prev.since, prev.until);
 
   // 每日廣告花費 & 廣告營收 (Meta + Google)
   const norm2 = d => { const p=d.split('/'); return `${p[0]}-${p[1].padStart(2,'0')}-${p[2].padStart(2,'0')}`; };
@@ -1498,20 +1555,31 @@ function renderSholine(json, since, until, trendData, gDaily) {
   const total = filtered.reduce((a,r) => ({
     gmv: a.gmv+r.gmv, revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
     returns: a.returns+r.returns, cancelled: a.cancelled+r.cancelled,
-    sessions: a.sessions+r.sessions, adSpend: a.adSpend+r.adSpend,
+    sessions: a.sessions+r.sessions, adSpend: a.adSpend+(r.adSpend||0),
   }), {gmv:0, revenue:0, orders:0, returns:0, cancelled:0, sessions:0, adSpend:0});
   const aov = total.orders > 0 ? total.gmv/total.orders : 0;
   const retCancelPct = total.gmv > 0 ? ((total.returns+total.cancelled)/total.gmv*100).toFixed(1) : '0.0';
+  const siteRoas = total.adSpend > 0 ? total.gmv/total.adSpend : 0;
+
+  // 前同期
+  const prevMetaSpend = (prevTrendData||[]).reduce((s,r)=>s+(r.spend||0), 0);
+  const prevGSpend = filterByDate(gDaily, prev.since, prev.until).reduce((s,r)=>s+(parseFloat(r['花費(TWD)'])||0), 0);
+  const pt = prevFiltered.reduce((a,r) => ({
+    gmv: a.gmv+r.gmv, revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
+  }), {gmv:0, revenue:0, orders:0});
+  pt.adSpend = prevMetaSpend + prevGSpend;
+  const prevAov = pt.orders > 0 ? pt.gmv/pt.orders : 0;
+  const prevSiteRoas = pt.adSpend > 0 ? pt.gmv/pt.adSpend : 0;
 
   document.getElementById('tab-sholine').innerHTML = `
     <div class="summary-grid">
-      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.gmv)}</div><div class="sub">${since} ～ ${until}</div></div>
-      <div class="sc"><div class="lbl">總營業額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">扣除退貨取消</div></div>
-      <div class="sc c-purple"><div class="lbl">總訂單量</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">有效訂單</div></div>
-      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">成交額 / 訂單數</div></div>
+      <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.gmv)}</div><div class="sub">${diffBadge(total.gmv,pt.gmv)}</div></div>
+      <div class="sc"><div class="lbl">總營業額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,pt.revenue)}</div></div>
+      <div class="sc c-purple"><div class="lbl">總訂單量</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">${diffBadge(total.orders,pt.orders)}</div></div>
+      <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">${diffBadge(aov,prevAov)}</div></div>
       <div class="sc"><div class="lbl">退貨取消佔比</div><div class="val">${retCancelPct}%</div><div class="sub">退 ${fmtM(total.returns)} / 取 ${fmtM(total.cancelled)}</div></div>
-      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtM(total.adSpend)}</div><div class="sub">Meta + Google</div></div>
-      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${total.adSpend>0?(total.gmv/total.adSpend).toFixed(2)+'x':'—'}</div><div class="sub">成交額 / 廣告花費</div></div>
+      <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtM(total.adSpend)}</div><div class="sub">${diffBadge(total.adSpend,pt.adSpend)}</div></div>
+      <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas?siteRoas.toFixed(2)+'x':'—'}</div><div class="sub">${diffBadge(siteRoas,prevSiteRoas)}</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
