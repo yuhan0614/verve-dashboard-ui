@@ -1346,6 +1346,8 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   const sinceD = since.replace(/-/g,'');
   const untilD = until.replace(/-/g,'');
+  const prevSinceD = prev.since.replace(/-/g,'');
+  const prevUntilD = prev.until.replace(/-/g,'');
 
   // Daily - filter by date range (ascending for chart, descending for table)
   const dailyAsc = (cache.daily||[])
@@ -1398,21 +1400,45 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const srcmed = Object.values(smMap).sort((a,b) => b.sessions - a.sessions);
 
   const R = 'style="text-align:right"';
-  const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th>工作階段%</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th>營收%</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th>工作階段%</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th>營收%</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
 
-  const dRow = r => `<tr>
-    <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
-    <td ${R}>${fmt(r.sessions)}</td><td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${fmt(r.conversions)}</td>
-    <td ${R}>${fmtR(r.totalRevenue)}</td><td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
-  </tr>`;
+  const dRow = r => {
+    const dayAdRev = adRevByDate[r.date] || 0;
+    const dayRevPct = parseFloat(r.totalRevenue||0) > 0 ? dayAdRev/parseFloat(r.totalRevenue)*100 : 0;
+    return `<tr>
+      <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
+      <td ${R}>${fmt(r.sessions)}</td><td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${fmt(r.conversions)}</td>
+      <td ${R}>${fmtR(r.totalRevenue)}</td>
+      <td ${R}>${fmtR(dayAdRev)}</td>
+      <td ${R}>${dayRevPct.toFixed(1)}%</td>
+      <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
+    </tr>`;
+  };
 
   // Summary totals
   const totalSess  = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalATC   = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
   const totalConv  = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
   const totalRev   = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+
+  // 廣告來源營收 (google/cpc + facebook/cpc)
+  const AD_SOURCES = ['google / cpc', 'facebook / cpc'];
+  const adRevByDate = {};
+  (cache.daily_source_medium||[])
+    .filter(r => r.date >= sinceD && r.date <= untilD && AD_SOURCES.includes((r.sessionSourceMedium||'').toLowerCase()))
+    .forEach(r => { adRevByDate[r.date] = (adRevByDate[r.date]||0) + parseFloat(r.totalRevenue||0); });
+  const totalAdRev = Object.values(adRevByDate).reduce((s,v)=>s+v, 0);
+  const adRevPct = totalRev > 0 ? totalAdRev/totalRev*100 : 0;
+
+  // 前同期廣告來源營收
+  const prevAdRevByDate = {};
+  (cache.daily_source_medium||[])
+    .filter(r => r.date >= prevSinceD && r.date <= prevUntilD && AD_SOURCES.includes((r.sessionSourceMedium||'').toLowerCase()))
+    .forEach(r => { prevAdRevByDate[r.date] = (prevAdRevByDate[r.date]||0) + parseFloat(r.totalRevenue||0); });
+  const prevTotalAdRev = Object.values(prevAdRevByDate).reduce((s,v)=>s+v, 0);
+  const prevAdRevPct = prevRev > 0 ? prevTotalAdRev/prevRev*100 : 0;
 
   // Ad spend per day (Meta + Google)
   const metaSpendMap = {};
@@ -1429,8 +1455,6 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const siteRoas = totalAdSpend > 0 ? totalRev/totalAdSpend : 0;
 
   // 前同期
-  const prevSinceD = prev.since.replace(/-/g,'');
-  const prevUntilD = prev.until.replace(/-/g,'');
   const prevDailyAsc = (cache.daily||[]).filter(r => r.date >= prevSinceD && r.date <= prevUntilD);
   const prevSess = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const prevATC  = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
@@ -1488,6 +1512,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <div class="sc c-pink"><div class="lbl">營收</div><div class="val">${fmtR(totalRev)}</div><div class="sub">${diffBadge(totalRev,prevRev)}</div></div>
       <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtR(totalAdSpend)}</div><div class="sub">${diffBadge(totalAdSpend,prevAdSpend)}</div></div>
       <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas.toFixed(2)}x</div><div class="sub">${diffBadge(siteRoas,prevSiteRoas)}</div></div>
+      <div class="sc c-orange"><div class="lbl">廣告營收佔比</div><div class="val">${adRevPct.toFixed(1)}%</div><div class="sub">${diffBadge(adRevPct,prevAdRevPct)}</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <h3>📅 每日趨勢</h3>
