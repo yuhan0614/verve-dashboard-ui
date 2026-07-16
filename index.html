@@ -1492,15 +1492,19 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const totalSmSess = srcmed.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalSmRev  = srcmed.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
 
+  const prevTotalChRev = Object.values(prevChMap).reduce((s,v)=>s+v.totalRevenue,0);
+  const prevTotalSmRev = Object.values(prevSmMap).reduce((s,v)=>s+v.totalRevenue,0);
+
   const cRow = r => {
     const p = prevChMap[r.sessionDefaultChannelGrouping||'(other)'] || {};
     const revPct = totalChRev > 0 ? parseFloat(r.totalRevenue||0)/totalChRev*100 : 0;
+    const prevRevPct = prevTotalChRev > 0 ? (p.totalRevenue||0)/prevTotalChRev*100 : 0;
     return `<tr>
       <td>${r.sessionDefaultChannelGrouping||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
       <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
-      <td ${R}>${revPct.toFixed(1)}%</td>
+      <td ${R}>${revPct.toFixed(1)}%<br>${diffBadge(revPct,prevRevPct)}</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
     </tr>`;
   };
@@ -1508,12 +1512,13 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const sRow = r => {
     const p = prevSmMap[r.sessionSourceMedium||'(other)'] || {};
     const revPct = totalSmRev > 0 ? parseFloat(r.totalRevenue||0)/totalSmRev*100 : 0;
+    const prevRevPct = prevTotalSmRev > 0 ? (p.totalRevenue||0)/prevTotalSmRev*100 : 0;
     return `<tr>
       <td>${r.sessionSourceMedium||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
       <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
-      <td ${R}>${revPct.toFixed(1)}%</td>
+      <td ${R}>${revPct.toFixed(1)}%<br>${diffBadge(revPct,prevRevPct)}</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
     </tr>`;
   };
