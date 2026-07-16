@@ -372,7 +372,7 @@ function diffBadge(curr, prev, inverse = false) {
   const sign = pct > 0 ? '+' : '';
   const good = inverse ? pct <= 0 : pct >= 0;
   const color = good ? '#52c41a' : '#f5222d';
-  return `<span style="font-size:11px;color:${color};font-weight:500">${sign}${pct.toFixed(1)}% vs 前期</span>`;
+  return `<span style="font-size:11px;color:${color};font-weight:500">${sign}${pct.toFixed(1)}%</span>`;
 }
 
 function calcPrevDates(since, until) {
@@ -1423,8 +1423,8 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   const R = 'style="text-align:right"';
   const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
-  const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
-  const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
 
   const dRow = r => {
     const dayAdRev = adRevByDate[r.date] || 0;
@@ -1494,22 +1494,26 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   const cRow = r => {
     const p = prevChMap[r.sessionDefaultChannelGrouping||'(other)'] || {};
+    const revPct = totalChRev > 0 ? parseFloat(r.totalRevenue||0)/totalChRev*100 : 0;
     return `<tr>
       <td>${r.sessionDefaultChannelGrouping||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
       <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
+      <td ${R}>${revPct.toFixed(1)}%</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
     </tr>`;
   };
 
   const sRow = r => {
     const p = prevSmMap[r.sessionSourceMedium||'(other)'] || {};
+    const revPct = totalSmRev > 0 ? parseFloat(r.totalRevenue||0)/totalSmRev*100 : 0;
     return `<tr>
       <td>${r.sessionSourceMedium||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
       <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
+      <td ${R}>${revPct.toFixed(1)}%</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
     </tr>`;
   };
