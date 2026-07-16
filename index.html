@@ -1460,7 +1460,6 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= prevSinceD && r.date <= prevUntilD && AD_SOURCES.includes((r.sessionSourceMedium||'').toLowerCase()))
     .forEach(r => { prevAdRevByDate[r.date] = (prevAdRevByDate[r.date]||0) + parseFloat(r.totalRevenue||0); });
   const prevTotalAdRev = Object.values(prevAdRevByDate).reduce((s,v)=>s+v, 0);
-  const prevAdRevPct = prevRev > 0 ? prevTotalAdRev/prevRev*100 : 0;
 
   // Ad spend per day (Meta + Google)
   const metaSpendMap = {};
@@ -1486,6 +1485,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const prevGSpend = filterByDate(gDaily, prev.since, prev.until).reduce((s,r)=>s+(parseFloat(r['花費(TWD)'])||0),0);
   const prevAdSpend = prevMetaSpend + prevGSpend;
   const prevSiteRoas = prevAdSpend > 0 ? prevRev/prevAdSpend : 0;
+  const prevAdRevPct = prevRev > 0 ? prevTotalAdRev/prevRev*100 : 0;
 
   const totalChSess = channels.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalChRev  = channels.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
