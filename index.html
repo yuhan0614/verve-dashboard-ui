@@ -1569,21 +1569,24 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
       ${scrollTable(daily, dRow, thead)}
     </div>
-    <div class="chart-card" style="margin-top:14px">
-      <h3>📊 管道分佈（工作階段 / 營收）</h3>
-      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px;max-width:280px;position:relative;height:220px"><canvas id="ga4PieSess"></canvas></div>
-        <div style="flex:1;min-width:200px;max-width:280px;position:relative;height:220px"><canvas id="ga4PieRev"></canvas></div>
-      </div>
-    </div>
     <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start;flex-wrap:wrap">
-      <div class="table-card" style="flex:1;min-width:280px">
-        <div class="table-header"><h3>📡 分管道</h3></div>
-        ${collapseTable(channels, cRow, chead, 'ga4ch')}
+      <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:14px">
+        <div class="chart-card">
+          <div style="position:relative;height:240px"><canvas id="ga4PieSess"></canvas></div>
+        </div>
+        <div class="table-card">
+          <div class="table-header"><h3>📡 分管道</h3></div>
+          ${collapseTable(channels, cRow, chead, 'ga4ch')}
+        </div>
       </div>
-      <div class="table-card" style="flex:1;min-width:280px">
-        <div class="table-header"><h3>🔗 分來源媒介</h3></div>
-        ${collapseTable(srcmed, sRow, shead, 'ga4sm')}
+      <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:14px">
+        <div class="chart-card">
+          <div style="position:relative;height:240px"><canvas id="ga4PieRev"></canvas></div>
+        </div>
+        <div class="table-card">
+          <div class="table-header"><h3>🔗 分來源媒介</h3></div>
+          ${collapseTable(srcmed, sRow, shead, 'ga4sm')}
+        </div>
       </div>
     </div>`;
 
