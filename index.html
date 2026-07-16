@@ -1550,6 +1550,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     return { labels, sessData, revData, colors };
   };
   const pieData = buildPieData(channels, 'sessionDefaultChannelGrouping', totalChSess, totalChRev);
+  const pieSmData = buildPieData(srcmed, 'sessionSourceMedium', totalSmSess, totalSmRev);
 
   document.getElementById('tab-ga4').innerHTML = `
     <div class="summary-grid">
@@ -1622,13 +1623,13 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   });
   new Chart(document.getElementById('ga4PieSess'), {
     type:'doughnut',
-    data:{ labels:pieData.labels, datasets:[{data:pieData.sessData, backgroundColor:pieData.colors, borderWidth:1}] },
-    options: pieOpts('工作階段佔比')
+    data:{ labels:pieData.labels, datasets:[{data:pieData.revData, backgroundColor:pieData.colors, borderWidth:1}] },
+    options: pieOpts('管道營收佔比')
   });
   new Chart(document.getElementById('ga4PieRev'), {
     type:'doughnut',
-    data:{ labels:pieData.labels, datasets:[{data:pieData.revData, backgroundColor:pieData.colors, borderWidth:1}] },
-    options: pieOpts('營收佔比')
+    data:{ labels:pieSmData.labels, datasets:[{data:pieSmData.revData, backgroundColor:pieSmData.colors, borderWidth:1}] },
+    options: pieOpts('來源媒介營收佔比')
   });
 }
 
