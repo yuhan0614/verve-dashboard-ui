@@ -88,12 +88,11 @@ GA4_METRICS  = [
     Metric(name="totalRevenue"),
     Metric(name="averageSessionDuration"),
     Metric(name="bounceRate"),
-    Metric(name="itemsViewed"),
 ]
 
 GA4_ITEM_METRICS = [
     Metric(name="itemsViewed"),
-    Metric(name="addToCarts"),
+    Metric(name="itemsAddedToCart"),
     Metric(name="itemsPurchased"),
     Metric(name="itemRevenue"),
 ]

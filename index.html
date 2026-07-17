@@ -1441,7 +1441,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   // Summary totals
   const totalSess       = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
-  const totalItemsViewed= dailyAsc.reduce((s,r)=>s+parseFloat(r.itemsViewed||0),0);
+  const totalItemsViewed= (cache.daily_items||[]).filter(r=>r.date>=sinceD&&r.date<=untilD).reduce((s,r)=>s+parseFloat(r.itemsViewed||0),0);
   const totalATC        = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
   const totalConv       = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
   const totalRev        = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
