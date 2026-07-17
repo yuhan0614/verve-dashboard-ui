@@ -1646,6 +1646,30 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
         ${collapseTable(items, iRow, ihead, 'ga4items')}
       </div>`;
     })()}
+    ${(() => {
+      const searchMap = {};
+      (cache.daily_search||[])
+        .filter(r => r.date >= sinceD && r.date <= untilD)
+        .forEach(r => {
+          const k = r.searchTerm||'';
+          if (!k) return;
+          if (!searchMap[k]) searchMap[k] = {term:k, count:0, sessions:0};
+          searchMap[k].count    += parseFloat(r.eventCount||0);
+          searchMap[k].sessions += parseFloat(r.sessions||0);
+        });
+      const searches = Object.values(searchMap).sort((a,b)=>b.count-a.count);
+      if (!searches.length) return '';
+      const shed = `<tr><th>搜尋關鍵字</th><th style="text-align:right">搜尋次數</th><th style="text-align:right">包含的工作階段</th></tr>`;
+      const shRow = r => `<tr>
+        <td>${r.term}</td>
+        <td style="text-align:right">${fmt(r.count)}</td>
+        <td style="text-align:right">${fmt(r.sessions)}</td>
+      </tr>`;
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header"><h3>🔍 站內搜尋關鍵字</h3></div>
+        ${collapseTable(searches, shRow, shed, 'ga4search')}
+      </div>`;
+    })()}
     <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start;flex-wrap:wrap">
       <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:14px">
         <div class="chart-card">

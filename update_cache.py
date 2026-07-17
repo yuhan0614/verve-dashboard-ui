@@ -163,6 +163,15 @@ def update_ga4():
     cache["daily_items"] = sorted(item_map.values(), key=lambda r: (r["date"], r["itemName"]))
     print(f"[GA4] daily_items updated: {len(new_items)} rows")
 
+    # daily_search
+    GA4_SEARCH_METRICS = [Metric(name="eventCount"), Metric(name="sessions")]
+    new_search = ga4_fetch(client, ["date", "searchTerm"], GA4_SEARCH_METRICS, start_date, end_date, limit=5000)
+    search_map = {(r["date"], r["searchTerm"]): r for r in cache.get("daily_search", [])}
+    for r in new_search:
+        search_map[(r["date"], r["searchTerm"])] = r
+    cache["daily_search"] = sorted(search_map.values(), key=lambda r: (r["date"], r["searchTerm"]))
+    print(f"[GA4] daily_search updated: {len(new_search)} rows")
+
     cache["updated"] = end_date
     with open("ga4_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
