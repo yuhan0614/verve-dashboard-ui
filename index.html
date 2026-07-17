@@ -1440,10 +1440,26 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   };
 
   // Summary totals
-  const totalSess  = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
-  const totalATC   = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
-  const totalConv  = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
-  const totalRev   = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+  const totalSess       = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
+  const totalItemsViewed= dailyAsc.reduce((s,r)=>s+parseFloat(r.itemsViewed||0),0);
+  const totalATC        = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
+  const totalConv       = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
+  const totalRev        = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+
+  // 商品彙總
+  const itemMap = {};
+  (cache.daily_items||[])
+    .filter(r => r.date >= sinceD && r.date <= untilD)
+    .forEach(r => {
+      const k = r.itemName||'(other)';
+      if (!itemMap[k]) itemMap[k] = {itemName:k,itemsViewed:0,addToCarts:0,itemsPurchased:0,itemRevenue:0};
+      const m = itemMap[k];
+      m.itemsViewed    += parseFloat(r.itemsViewed||0);
+      m.addToCarts     += parseFloat(r.addToCarts||0);
+      m.itemsPurchased += parseFloat(r.itemsPurchased||0);
+      m.itemRevenue    += parseFloat(r.itemRevenue||0);
+    });
+  const items = Object.values(itemMap).sort((a,b)=>b.itemRevenue-a.itemRevenue);
 
   // 廣告來源營收 (google/cpc + facebook/cpc)
   const AD_SOURCES = ['google / cpc', 'facebook / cpc'];
@@ -1579,6 +1595,57 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
       ${scrollTable(daily, dRow, thead)}
     </div>
+    ${(() => {
+      const funnelSteps = [
+        { label:'工作階段', val: totalSess, color:'#6366f1' },
+        { label:'商品瀏覽', val: totalItemsViewed, color:'#3b82f6' },
+        { label:'加入購物車', val: totalATC, color:'#f59e0b' },
+        { label:'購買', val: totalConv, color:'#10b981' },
+      ].filter(s => s.val > 0);
+      const steps = funnelSteps.map((s, i) => {
+        const prev = i > 0 ? funnelSteps[i-1].val : null;
+        const pct = prev ? (s.val/prev*100).toFixed(1)+'%' : '';
+        return `<div style="flex:1;text-align:center">
+          <div style="font-size:13px;color:#888;margin-bottom:4px">${s.label}</div>
+          <div style="font-size:22px;font-weight:700;color:${s.color}">${fmt(s.val)}</div>
+          ${pct ? `<div style="font-size:11px;color:#aaa;margin-top:2px">↑ 上一步 ${pct}</div>` : ''}
+        </div>`;
+      });
+      const arrows = funnelSteps.slice(1).map(()=>`<div style="color:#d1d5db;font-size:18px;padding-top:12px">▶</div>`);
+      const merged = [];
+      steps.forEach((s,i)=>{ merged.push(s); if(arrows[i]) merged.push(arrows[i]); });
+      return `<div class="chart-card" style="margin-top:14px">
+        <h3>🔀 購物漏斗</h3>
+        <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;padding:8px 0">
+          ${merged.join('')}
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:#aaa">
+          購物車放棄率：<strong style="color:${(1-totalConv/Math.max(totalATC,1))*100>50?'#f5222d':'#888'}">${totalATC > 0 ? ((1-totalConv/totalATC)*100).toFixed(1) : '—'}%</strong>
+          的人加入購物車後沒有完成購買
+        </div>
+      </div>`;
+    })()}
+    ${(() => {
+      if (!items.length) return '';
+      const ihead = `<tr><th style="min-width:200px">商品名稱</th><th style="text-align:right">瀏覽</th><th style="text-align:right">加入購物車</th><th style="text-align:right">購買</th><th style="text-align:right">營收</th><th style="text-align:right">加購率</th><th style="text-align:right">轉換率</th></tr>`;
+      const iRow = r => {
+        const atcRate = r.itemsViewed > 0 ? (r.addToCarts/r.itemsViewed*100).toFixed(1)+'%' : '—';
+        const cvRate  = r.itemsViewed > 0 ? (r.itemsPurchased/r.itemsViewed*100).toFixed(1)+'%' : '—';
+        return `<tr>
+          <td>${r.itemName}</td>
+          <td style="text-align:right">${fmt(r.itemsViewed)}</td>
+          <td style="text-align:right">${fmt(r.addToCarts)}</td>
+          <td style="text-align:right">${fmt(r.itemsPurchased)}</td>
+          <td style="text-align:right">${fmtR(r.itemRevenue)}</td>
+          <td style="text-align:right">${atcRate}</td>
+          <td style="text-align:right">${cvRate}</td>
+        </tr>`;
+      };
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header"><h3>🛍️ 商品表現</h3></div>
+        ${collapseTable(items, iRow, ihead, 'ga4items')}
+      </div>`;
+    })()}
     <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start;flex-wrap:wrap">
       <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:14px">
         <div class="chart-card">

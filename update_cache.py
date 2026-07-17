@@ -88,6 +88,14 @@ GA4_METRICS  = [
     Metric(name="totalRevenue"),
     Metric(name="averageSessionDuration"),
     Metric(name="bounceRate"),
+    Metric(name="itemsViewed"),
+]
+
+GA4_ITEM_METRICS = [
+    Metric(name="itemsViewed"),
+    Metric(name="addToCarts"),
+    Metric(name="itemsPurchased"),
+    Metric(name="itemRevenue"),
 ]
 
 def ga4_client():
@@ -96,16 +104,16 @@ def ga4_client():
     )
     return BetaAnalyticsDataClient(credentials=creds)
 
-def ga4_fetch(client, dimensions, start_date, end_date, limit=100000):
+def ga4_fetch(client, dimensions, metrics, start_date, end_date, limit=100000):
     resp = client.run_report(RunReportRequest(
         property=f"properties/{GA4_PROPERTY}",
         dimensions=[Dimension(name=n) for n in dimensions],
-        metrics=GA4_METRICS,
+        metrics=metrics,
         date_ranges=[DateRange(start_date=start_date, end_date=end_date)],
         limit=limit,
     ))
     dim_names    = [d.name for d in resp.dimension_headers]
-    metric_names = ["sessions","addToCarts","conversions","totalRevenue","averageSessionDuration","bounceRate"]
+    metric_names = [m.name for m in resp.metric_headers]
     rows = []
     for row in resp.rows:
         d = {dim_names[i]: row.dimension_values[i].value for i in range(len(dim_names))}
@@ -124,7 +132,7 @@ def update_ga4():
     client = ga4_client()
 
     # daily
-    new_daily = ga4_fetch(client, ["date"], start_date, end_date)
+    new_daily = ga4_fetch(client, ["date"], GA4_METRICS, start_date, end_date)
     daily_map = {r["date"]: r for r in cache.get("daily", [])}
     for r in new_daily:
         daily_map[r["date"]] = r
@@ -132,7 +140,7 @@ def update_ga4():
     print(f"[GA4] daily updated: {len(new_daily)} rows")
 
     # daily_channels
-    new_ch = ga4_fetch(client, ["date", "sessionDefaultChannelGrouping"], start_date, end_date)
+    new_ch = ga4_fetch(client, ["date", "sessionDefaultChannelGrouping"], GA4_METRICS, start_date, end_date)
     ch_map = {(r["date"], r["sessionDefaultChannelGrouping"]): r for r in cache.get("daily_channels", [])}
     for r in new_ch:
         ch_map[(r["date"], r["sessionDefaultChannelGrouping"])] = r
@@ -140,12 +148,20 @@ def update_ga4():
     print(f"[GA4] daily_channels updated: {len(new_ch)} rows")
 
     # daily_source_medium
-    new_sm = ga4_fetch(client, ["date", "sessionSourceMedium"], start_date, end_date)
+    new_sm = ga4_fetch(client, ["date", "sessionSourceMedium"], GA4_METRICS, start_date, end_date)
     sm_map = {(r["date"], r["sessionSourceMedium"]): r for r in cache.get("daily_source_medium", [])}
     for r in new_sm:
         sm_map[(r["date"], r["sessionSourceMedium"])] = r
     cache["daily_source_medium"] = sorted(sm_map.values(), key=lambda r: (r["date"], r["sessionSourceMedium"]))
     print(f"[GA4] daily_source_medium updated: {len(new_sm)} rows")
+
+    # daily_items
+    new_items = ga4_fetch(client, ["date", "itemName"], GA4_ITEM_METRICS, start_date, end_date, limit=5000)
+    item_map = {(r["date"], r["itemName"]): r for r in cache.get("daily_items", [])}
+    for r in new_items:
+        item_map[(r["date"], r["itemName"])] = r
+    cache["daily_items"] = sorted(item_map.values(), key=lambda r: (r["date"], r["itemName"]))
+    print(f"[GA4] daily_items updated: {len(new_items)} rows")
 
     cache["updated"] = end_date
     with open("ga4_cache.json", "w") as f:
