@@ -1462,7 +1462,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const items = Object.values(itemMap).sort((a,b)=>b.itemRevenue-a.itemRevenue);
 
   // 廣告來源營收 (google/cpc + facebook/cpc)
-  const AD_SOURCES = ['google / cpc', 'facebook / cpc'];
+  const AD_SOURCES = ['google / cpc', 'facebook / cpc', 'facebook / paid'];
   const adRevByDate = {};
   (cache.daily_source_medium||[])
     .filter(r => r.date >= sinceD && r.date <= untilD && AD_SOURCES.includes((r.sessionSourceMedium||'').toLowerCase()))
