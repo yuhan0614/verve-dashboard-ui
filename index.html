@@ -331,7 +331,7 @@ async function fetchData(forceRefresh = false) {
     const ga4Cache     = await ga4Res.json();
     const prevTrendData = (await prevTrendRes.json()).data || [];
 
-    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender, prevTrendData, prev);
+    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender, prevTrendData, prev, ga4Cache);
     renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
     renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData);
     renderPerf(campData, trendData, since, until, prevTrendData);
@@ -828,7 +828,7 @@ function gadsTable(rows, cols) {
 
 // ── 媒體總成效 Tab ─────────────────────────────────────────
 let overallAgePie=null,overallAgeBar=null,overallGenderPie=null,overallGenderBar=null;
-function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender, prevTrendData, prev) {
+function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender, prevTrendData, prev, ga4Cache) {
   const el = document.getElementById('tab-overall');
 
   // Meta daily totals
@@ -874,6 +874,14 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   prevTotal.roas = prevTotal.spend > 0 ? prevTotal.revenue/prevTotal.spend : 0;
   prevTotal.cpa  = prevTotal.purchase > 0 ? prevTotal.spend/prevTotal.purchase : 0;
 
+  // GA4 revenue
+  const sinceD = since.replace(/-/g,''), untilD = until.replace(/-/g,'');
+  const prevSinceD = prev.since.replace(/-/g,''), prevUntilD = prev.until.replace(/-/g,'');
+  const ga4Rev = (ga4Cache?.daily||[]).filter(r=>r.date>=sinceD&&r.date<=untilD).reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+  const ga4Roas = total.spend > 0 ? ga4Rev/total.spend : 0;
+  const prevGa4Rev = (ga4Cache?.daily||[]).filter(r=>r.date>=prevSinceD&&r.date<=prevUntilD).reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
+  const prevGa4Roas = prevTotal.spend > 0 ? prevGa4Rev/prevTotal.spend : 0;
+
   // Trend: align dates, compute daily total spend + ROAS
   const metaByDate = {};
   metaDays.forEach(r => { metaByDate[r.date_start] = { spend: r.spend||0, revenue: r.purchase_value||0 }; });
@@ -890,12 +898,12 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   el.innerHTML = `
     <div class="summary-grid">
       <div class="sc c-blue"><div class="lbl">合計花費</div><div class="val">${fmtM(total.spend)}</div><div class="sub">${diffBadge(total.spend,prevTotal.spend)}</div></div>
-      <div class="sc" style="background:#fff7e6"><div class="lbl">Meta 花費</div><div class="val" style="color:#1877f2">${fmtM(meta.spend)}</div><div class="sub">${diffBadge(meta.spend,prevMeta.spend)}</div></div>
-      <div class="sc" style="background:#f0f9ff"><div class="lbl">Google 花費</div><div class="val" style="color:#34a853">${fmtM(gads.spend)}</div><div class="sub">${diffBadge(gads.spend,prevGads.spend)}</div></div>
       <div class="sc c-teal"><div class="lbl">合計購買</div><div class="val">${Math.round(total.purchase).toLocaleString()}</div><div class="sub">${diffBadge(total.purchase,prevTotal.purchase)}</div></div>
       <div class="sc c-pink"><div class="lbl">合計營收</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,prevTotal.revenue)}</div></div>
       <div class="sc c-green"><div class="lbl">合計 ROAS</div><div class="val">${total.roas.toFixed(2)}x</div><div class="sub">${diffBadge(total.roas,prevTotal.roas)}</div></div>
       <div class="sc"><div class="lbl">合計 CPA</div><div class="val">${fmtM(total.cpa)}</div><div class="sub">${diffBadge(total.cpa,prevTotal.cpa,true)}</div></div>
+      <div class="sc" style="background:#eff6ff"><div class="lbl">GA4 營收</div><div class="val" style="color:#2563eb">${fmtM(ga4Rev)}</div><div class="sub">${diffBadge(ga4Rev,prevGa4Rev)}</div></div>
+      <div class="sc" style="background:#eff6ff"><div class="lbl">GA4 ROAS</div><div class="val" style="color:#2563eb">${ga4Roas.toFixed(2)}x</div><div class="sub">${diffBadge(ga4Roas,prevGa4Roas)}</div></div>
     </div>
     <div class="charts-row">
       <div class="chart-card">
@@ -913,6 +921,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
         <thead><tr>
           <th>媒體</th><th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th>
           <th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
+          <th style="color:#2563eb">GA4 營收</th><th style="color:#2563eb">GA4 ROAS</th>
         </tr></thead>
         <tbody>
           <tr>
@@ -920,18 +929,21 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
             <td>${fmtM(meta.spend)}</td><td>${fmtN(meta.imp)}</td><td>${fmtN(meta.clk)}</td>
             <td>${fmtP(meta.ctr)}</td><td>${fmtN(meta.purchase,0)}</td><td>${fmtM(meta.revenue)}</td>
             <td class="${rc(meta.roas)}">${meta.roas.toFixed(2)}x</td><td>${fmtM(meta.cpa)}</td>
+            <td colspan="2" style="color:#aaa;font-size:12px;text-align:center">—</td>
           </tr>
           <tr>
             <td><strong style="color:#34a853">Google</strong></td>
             <td>${fmtM(gads.spend)}</td><td>${fmtN(gads.imp)}</td><td>${fmtN(gads.clk)}</td>
             <td>${fmtP(gads.ctr)}</td><td>${fmtN(gads.purchase,0)}</td><td>${fmtM(gads.revenue)}</td>
             <td class="${rc(gads.roas)}">${gads.roas.toFixed(2)}x</td><td>${fmtM(gads.cpa)}</td>
+            <td colspan="2" style="color:#aaa;font-size:12px;text-align:center">—</td>
           </tr>
-          <tr style="background:#f9fafb;font-weight:600">
+          <tr style="background:#eff6ff;font-weight:600">
             <td>合計</td>
             <td>${fmtM(total.spend)}</td><td>${fmtN(total.imp)}</td><td>${fmtN(total.clk)}</td>
             <td>${fmtP(total.imp>0?total.clk/total.imp*100:0)}</td><td>${fmtN(total.purchase,0)}</td><td>${fmtM(total.revenue)}</td>
             <td class="${rc(total.roas)}">${total.roas.toFixed(2)}x</td><td>${fmtM(total.cpa)}</td>
+            <td style="color:#2563eb">${fmtM(ga4Rev)}</td><td style="color:#2563eb">${ga4Roas.toFixed(2)}x</td>
           </tr>
         </tbody>
       </table></div>
