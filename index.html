@@ -1619,17 +1619,10 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   };
 
   const collapseTable = (rows, rowFn, hd, tableId) => {
-    const top5 = rows.slice(0, 5);
-    const rest = rows.slice(5);
-    const restRows = rest.length ? `<tbody id="${tableId}-rest" style="display:none">${rest.map(rowFn).join('')}</tbody>` : '';
-    const btn = rest.length ? `<button id="${tableId}-btn" onclick="
-      const r=document.getElementById('${tableId}-rest');
-      const b=document.getElementById('${tableId}-btn');
-      if(r.style.display==='none'){r.style.display='';b.textContent='收起';}else{r.style.display='none';b.textContent='顯示更多 (${rest.length})';}
-    " style="margin-top:8px;font-size:12px;color:#6366f1;background:none;border:none;cursor:pointer;padding:0">顯示更多 (${rest.length})</button>` : '';
-    return `<div style="overflow-x:auto">
-      <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${top5.map(rowFn).join('')}</tbody>${restRows}</table>
-    </div>${btn}`;
+    const visH = 8 * rowH + 40;
+    return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
+      <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
+    </div></div>`;
   };
 
   // 餅圖資料：只列出 revenue > 5% 的管道，其餘歸入其他
