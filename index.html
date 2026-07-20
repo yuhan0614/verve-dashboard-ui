@@ -297,8 +297,8 @@ async function fetchData(forceRefresh = false) {
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${forceRefresh?'&force=true':''}`),
       fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${forceRefresh?'&force=true':''}`),
       fetch(`${API_BASE}/api/ad_urls?account=${ACCOUNT_ID}`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=age`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&breakdowns=gender`),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign&breakdowns=age`),
+      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign&breakdowns=gender`),
       fetch(GADS_CSV.daily),
       fetch(GADS_CSV.campaign),
       fetch(GADS_CSV.age),
@@ -608,26 +608,63 @@ function renderAdTable(data) {
   }).join('');
 }
 
+let _metaDemoCharts = [];
+
 function renderDemographic(ageData, genderData) {
   const el = document.getElementById('tab-perf');
+  const ageOrder    = ['13-17','18-24','25-34','35-44','45-54','55-64','65+','Unknown'];
+  const genderOrder = ['male','female','unknown'];
+  const genderMap   = { male:'男性', female:'女性', unknown:'不明' };
+  const EXCLUDE     = ['不明','unknown','Unknown'];
 
+  const camps = [...new Set([
+    ...ageData.map(r=>r.campaign_name), ...genderData.map(r=>r.campaign_name)
+  ].filter(Boolean))].sort();
+
+  el.insertAdjacentHTML('beforeend', `
+    <div class="table-card" style="margin-top:20px;padding:12px 16px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:13px;font-weight:600;color:#555">活動篩選</span>
+        <select id="metaDemoFilter" style="font-size:13px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;min-width:260px">
+          <option value="">全部活動</option>
+          ${camps.map(c=>`<option value="${encodeURIComponent(c)}">${c}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div id="metaDemoCards"></div>`);
+
+  function aggByKey(rows, key) {
+    const map = {};
+    rows.forEach(r => {
+      const k = r[key]||'—';
+      if (!map[k]) map[k] = {spend:0,impressions:0,link_clicks:0,add_to_cart:0,purchase:0,purchase_value:0};
+      const m = map[k];
+      m.spend         += parseFloat(r.spend)||0;
+      m.impressions   += parseFloat(r.impressions)||0;
+      m.link_clicks   += parseFloat(r.link_clicks)||0;
+      m.add_to_cart   += parseFloat(r.add_to_cart)||0;
+      m.purchase      += parseFloat(r.purchase)||0;
+      m.purchase_value+= parseFloat(r.purchase_value)||0;
+    });
+    return Object.entries(map).map(([k,v]) => ({
+      [key]:k, spend:v.spend, impressions:v.impressions, link_clicks:v.link_clicks,
+      ctr: v.impressions>0?v.link_clicks/v.impressions*100:0,
+      cplc: v.link_clicks>0?v.spend/v.link_clicks:0,
+      add_to_cart:v.add_to_cart, purchase:v.purchase, purchase_value:v.purchase_value,
+      roas: v.spend>0?v.purchase_value/v.spend:0,
+    }));
+  }
 
   function buildSectionHTML(rows, labelKey, labelMap, pieId, barId) {
     if (!rows.length) return '<p style="color:#aaa;padding:20px">無資料</p>';
     const tableRows = rows.map(r => {
-      const spend = +r.spend||0, pur = +r.purchase||0, roas = +r.roas||0;
-      const cpa = pur ? spend/pur : 0;
-      const label = labelMap?.[r[labelKey]] || r[labelKey] || '—';
+      const spend=r.spend||0, pur=r.purchase||0, roas=r.roas||0, cpa=pur?spend/pur:0;
+      const label = labelMap?.[r[labelKey]]||r[labelKey]||'—';
       return `<tr>
         <td><strong>${label}</strong></td>
-        <td>${fmtM(spend)}</td>
-        <td>${fmtN(+r.impressions||0)}</td>
-        <td>${fmtN(+r.link_clicks||0)}</td>
-        <td>${fmtP(+r.ctr||0)}</td>
-        <td>${r.cplc?fmtM(+r.cplc):'<span class="na">—</span>'}</td>
-        <td>${fmtN(+r.add_to_cart||0)}</td>
-        <td>${fmtN(pur)}</td>
-        <td>${fmtM(+r.purchase_value||0)}</td>
+        <td>${fmtM(spend)}</td><td>${fmtN(r.impressions)}</td><td>${fmtN(r.link_clicks)}</td>
+        <td>${fmtP(r.ctr)}</td><td>${r.cplc?fmtM(r.cplc):'<span class="na">—</span>'}</td>
+        <td>${fmtN(r.add_to_cart)}</td><td>${fmtN(pur)}</td><td>${fmtM(r.purchase_value)}</td>
         <td class="${rc(roas)}">${roas?roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
         <td>${cpa?fmtM(cpa):'<span class="na">—</span>'}</td>
       </tr>`;
@@ -644,113 +681,78 @@ function renderDemographic(ageData, genderData) {
         <thead><tr>
           <th>${labelKey==='age'?'年齡':'性別'}</th>
           <th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
-        </tr></thead>
-        <tbody>${tableRows}</tbody>
+        </tr></thead><tbody>${tableRows}</tbody>
       </table></div>`;
   }
 
   function buildCharts(rows, labelKey, labelMap, pieId, barId) {
-    if (!rows.length) return;
-    const EXCLUDE = ['不明', 'unknown', 'Unknown'];
-    const barRows = rows.filter(r => !EXCLUDE.includes(labelMap?.[r[labelKey]] || r[labelKey]));
-    const labels = barRows.map(r => labelMap?.[r[labelKey]] || r[labelKey] || '—');
-    const spends = barRows.map(r => +r.spend||0);
-    const roases = barRows.map(r => +r.roas||0);
-    const totalSpend = spends.reduce((a,b)=>a+b, 0);
-    const dimName = labelKey === 'age' ? '年齡' : '性別';
+    if (!rows.length) return [];
+    const barRows = rows.filter(r=>!EXCLUDE.includes(labelMap?.[r[labelKey]]||r[labelKey]));
+    const labels  = barRows.map(r=>labelMap?.[r[labelKey]]||r[labelKey]||'—');
+    const spends  = barRows.map(r=>r.spend||0);
+    const roases  = barRows.map(r=>r.roas||0);
+    const totalSpend = spends.reduce((a,b)=>a+b,0);
+    const dimName = labelKey==='age'?'年齡':'性別';
+    const pieColors = labelKey==='gender'
+      ? barRows.map(r=>{const g=labelMap?.[r[labelKey]]||r[labelKey];return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa';})
+      : PIE_COLORS.slice(0,barRows.length);
+    const barColor = labelKey==='gender'?null:'#a8c8f8';
 
-    const pieColors = labelKey === 'gender'
-      ? barRows.map(r => { const g = labelMap?.[r[labelKey]]||r[labelKey]; return g==='女性'?'#f74f7e':g==='男性'?'#4f8ef7':'#aaa'; })
-      : PIE_COLORS.slice(0, barRows.length);
-    const barColor = labelKey === 'gender' ? null : '#a8c8f8';
+    const c1 = new Chart(document.getElementById(pieId), {
+      type:'doughnut',
+      data:{labels,datasets:[{data:spends,backgroundColor:pieColors,borderWidth:2,borderColor:'#fff'}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{
+        title:{display:true,text:`花費分佈（${dimName}）`,font:{size:13,weight:'bold'},padding:{bottom:8}},
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${totalSpend?(ctx.parsed/totalSpend*100).toFixed(1):0}%)`}}
+      }}
+    });
+    const legendEl = document.getElementById(pieId+'-legend');
+    if (legendEl) legendEl.innerHTML = rows.map((r,i)=>{
+      const lbl=labelMap?.[r[labelKey]]||r[labelKey]||'—', val=r.spend||0;
+      const pct=totalSpend?(val/totalSpend*100).toFixed(1):'0.0';
+      return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${pieColors[i]||'#ccc'};flex-shrink:0"></span><span>${lbl} ${pct}%</span></div>`;
+    }).join('');
 
-    new Chart(document.getElementById(pieId), {
-      type: 'doughnut',
-      data: { labels, datasets: [{ data: spends, backgroundColor: pieColors, borderWidth: 2, borderColor: '#fff' }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        cutout: '60%',
-        plugins: {
-          title: { display: true, text: `花費分佈（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 8 } },
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: ctx => {
-                const val = ctx.parsed;
-                const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
-                return ` ${fmtM(val)} (${pct}%)`;
-              }
-            }
-          }
-        }
+    const c2 = new Chart(document.getElementById(barId), {
+      data:{labels,datasets:[
+        {type:'bar',label:'花費',data:spends,backgroundColor:barColor?barColor:pieColors.map(c=>c+'88'),borderColor:barColor?'#7aaee8':pieColors,borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
+        {type:'line',label:'ROAS',data:roases,borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2',order:1}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{title:{display:true,text:`花費 / ROAS（${dimName}）`,font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}},
+        scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}}
       }
     });
-    // 自訂 2 欄 legend
-    const legendEl = document.getElementById(pieId + '-legend');
-    if (legendEl) {
-      legendEl.innerHTML = rows.map((r, i) => {
-        const lbl = labelMap?.[r[labelKey]] || r[labelKey] || '—';
-        const val = +r.spend||0;
-        const pct = totalSpend ? (val/totalSpend*100).toFixed(1) : '0.0';
-        const color = pieColors[i] || '#ccc';
-        return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap">
-          <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${color};flex-shrink:0"></span>
-          <span>${lbl} ${pct}%</span>
-        </div>`;
-      }).join('');
-    }
-
-    new Chart(document.getElementById(barId), {
-      data: {
-        labels,
-        datasets: [
-          { type:'bar', label:'花費', data:spends, backgroundColor: barColor ? barColor : pieColors.map(c=>c+'88'), borderColor: barColor ? '#7aaee8' : pieColors, borderWidth:1, yAxisID:'y', borderRadius:4, order:2 },
-          { type:'line', label:'ROAS', data:roases, borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointStyle:'circle', pointRadius:4, pointBackgroundColor:'#fff', pointBorderColor:'#e8833a', pointBorderWidth:2, tension:0.3, yAxisID:'y2', order:1 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          title: { display: true, text: `花費 / ROAS（${dimName}）`, font: { size: 13, weight: 'bold' }, padding: { bottom: 8 } },
-          legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 14, padding: 12 } }
-        },
-        scales: {
-          x: { grid: { display: false } },
-          y: { position:'left', title: { display:true, text:'花費', font:{size:11} }, grid: { color:'#f0f0f0' } },
-          y2: { position:'right', title: { display:true, text:'ROAS', font:{size:11} }, grid: { drawOnChartArea:false } }
-        }
-      }
-    });
+    return [c1, c2];
   }
 
-  const ageOrder = ['13-17','18-24','25-34','35-44','45-54','55-64','65+','Unknown'];
-  const ageSorted = [...ageData].filter(r=>r.age).sort((a,b) => {
-    const ai = ageOrder.indexOf(a.age), bi = ageOrder.indexOf(b.age);
-    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  function drawMetaDemo(selectedCamp) {
+    _metaDemoCharts.forEach(c=>c.destroy());
+    _metaDemoCharts = [];
+    const fa = selectedCamp ? ageData.filter(r=>r.campaign_name===selectedCamp) : ageData;
+    const fg = selectedCamp ? genderData.filter(r=>r.campaign_name===selectedCamp) : genderData;
+    const ageSorted = aggByKey(fa,'age').sort((a,b)=>{const ai=ageOrder.indexOf(a.age),bi=ageOrder.indexOf(b.age);return(ai<0?99:ai)-(bi<0?99:bi);});
+    const gSorted   = aggByKey(fg,'gender').sort((a,b)=>{const ai=genderOrder.indexOf(a.gender),bi=genderOrder.indexOf(b.gender);return(ai<0?99:ai)-(bi<0?99:bi);});
+    const container = document.getElementById('metaDemoCards');
+    if (!ageSorted.length && !gSorted.length) { container.innerHTML='<p style="color:#aaa;padding:20px">無資料</p>'; return; }
+    container.innerHTML = `
+      <div class="table-card" style="margin-bottom:20px">
+        <div class="table-header"><h3>年齡分析</h3></div>
+        ${buildSectionHTML(ageSorted,'age',null,'agePieChart','ageBarChart')}
+      </div>
+      <div class="table-card">
+        <div class="table-header"><h3>性別分析</h3></div>
+        ${buildSectionHTML(gSorted,'gender',genderMap,'genderPieChart','genderBarChart')}
+      </div>`;
+    _metaDemoCharts.push(...buildCharts(ageSorted,'age',null,'agePieChart','ageBarChart'));
+    _metaDemoCharts.push(...buildCharts(gSorted,'gender',genderMap,'genderPieChart','genderBarChart'));
+  }
+
+  document.getElementById('metaDemoFilter').addEventListener('change', e => {
+    drawMetaDemo(decodeURIComponent(e.target.value));
   });
-
-  const genderOrder = ['male','female','unknown','男性','女性','不明'];
-  const genderMap = { male:'男性', female:'女性', unknown:'不明' };
-  const genderSorted = [...genderData].filter(r=>r.gender).sort((a,b) => {
-    const ai = genderOrder.indexOf(a.gender), bi = genderOrder.indexOf(b.gender);
-    return (ai===-1?99:ai) - (bi===-1?99:bi);
-  });
-
-  if (!ageSorted.length && !genderSorted.length) return;
-
-  el.insertAdjacentHTML('beforeend', `<div style="padding:0 0 20px">
-    <div class="table-card" style="margin-bottom:20px">
-      <div class="table-header"><h3>年齡分析</h3></div>
-      ${buildSectionHTML(ageSorted, 'age', null, 'agePieChart', 'ageBarChart')}
-    </div>
-    <div class="table-card">
-      <div class="table-header"><h3>性別分析</h3></div>
-      ${buildSectionHTML(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart')}
-    </div>
-  </div>`);
-
-  buildCharts(ageSorted, 'age', null, 'agePieChart', 'ageBarChart');
-  buildCharts(genderSorted, 'gender', genderMap, 'genderPieChart', 'genderBarChart');
+  drawMetaDemo('');
 }
 
 // ── CSV parser ────────────────────────────────────────────────
@@ -1243,72 +1245,120 @@ function renderGoogleAds(data, since, until, prev) {
     options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ font:{size:10}, boxWidth:10, padding:6 } } } }
   });
 
-  // 年齡分析（donut + bar + table）
-  if (ageRows.length) {
-    const AGE_EXCLUDE = ['不明', 'Unknown', 'unknown'];
-    const ageBarRows = ageRows.filter(r => !AGE_EXCLUDE.includes(r['年齡層']));
-    const agePieRows = ageBarRows;
-    const ageColors = PIE_COLORS.slice(0, agePieRows.length);
-    const ageTotalSpend = agePieRows.reduce((s,r)=>s+r.spend, 0);
-    el.insertAdjacentHTML('beforeend', `
-      <div class="table-card" style="margin-top:20px">
-        <div class="table-header"><h3>👥 年齡分析</h3></div>
+  // 年齡 & 性別 — 活動篩選
+  const gadsDemoCamps = [...new Set(
+    [...filterByDate(data.age, since, until), ...filterByDate(data.gender, since, until)]
+      .map(r=>r['廣告活動']).filter(Boolean)
+  )].sort();
+
+  let _gadsDemoCharts = [];
+
+  function drawGadsDemo(selectedCamp) {
+    _gadsDemoCharts.forEach(c=>c.destroy());
+    _gadsDemoCharts = [];
+
+    const AGE_EXCL = ['不明','Unknown','unknown'];
+    const gAgeOrder2 = ['18-24','25-34','35-44','45-54','55-64','65-UP','65+','Unknown'];
+
+    const filteredAge    = filterByDate(data.age, since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+    const filteredGender = filterByDate(data.gender, since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+
+    const agg2 = (rows, dimKey) => {
+      const map = {};
+      rows.forEach(r => {
+        const k = r[dimKey]||'—';
+        if (!map[k]) map[k] = {spend:0,imp:0,clk:0,purchase:0,revenue:0};
+        map[k].spend   += parseFloat(r['花費(TWD)'])||0;
+        map[k].imp     += parseInt(r['曝光'])||0;
+        map[k].clk     += parseInt(r['點擊'])||0;
+        map[k].purchase+= parseFloat(r['購買'])||0;
+        map[k].revenue += parseFloat(r['營收(TWD)'])||0;
+      });
+      return Object.entries(map).map(([k,v])=>({
+        [dimKey]:k, spend:v.spend, imp:v.imp, clk:v.clk,
+        ctr: v.imp>0?v.clk/v.imp*100:0,
+        purchase:v.purchase, revenue:v.revenue,
+        cpa: v.purchase>0?v.spend/v.purchase:0,
+        roas: v.spend>0?v.revenue/v.spend:0,
+      }));
+    };
+
+    const aRows = agg2(filteredAge,'年齡層').sort((a,b)=>{
+      const ai=gAgeOrder2.indexOf(a['年齡層']),bi=gAgeOrder2.indexOf(b['年齡層']);
+      return(ai<0?99:ai)-(bi<0?99:bi);
+    });
+    const gRows = agg2(filteredGender,'性別').sort((a,b)=>b.spend-a.spend);
+
+    const container = document.getElementById('gadsDemoCards');
+    container.innerHTML = '';
+
+    const renderDemoCard = (rows, dimKey, title, pieId, barId, EXCL) => {
+      if (!rows.length) return;
+      const barRows = rows.filter(r=>!EXCL.includes(r[dimKey]));
+      const colors = dimKey==='性別'
+        ? rows.map(r=>r[dimKey]==='女性'?'#f74f7e':r[dimKey]==='男性'?'#4285f4':'#aaa')
+        : PIE_COLORS.slice(0,rows.length);
+      const totalSpend = rows.reduce((s,r)=>s+r.spend,0);
+
+      const card = document.createElement('div');
+      card.className = 'table-card';
+      card.style.marginTop = '20px';
+      card.innerHTML = `
+        <div class="table-header"><h3>${title}</h3></div>
         <div style="display:flex;gap:24px;padding:20px;align-items:center">
           <div style="flex:2;min-width:0">
-            <div style="position:relative;height:240px"><canvas id="gadsAgePieChart"></canvas></div>
-            <div id="gadsAgePieChart-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
+            <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
+            <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
           </div>
-          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsAgeBarChart"></canvas></div>
+          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
         </div>
-        ${gadsTable(ageRows, [{label:'年齡層',key:'年齡層'},...metricCols])}
-      </div>`);
-    new Chart(document.getElementById('gadsAgePieChart'), {
-      type:'doughnut', data:{ labels:agePieRows.map(r=>r['年齡層']), datasets:[{data:agePieRows.map(r=>r.spend), backgroundColor:ageColors, borderWidth:2, borderColor:'#fff'}] },
-      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}}, legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${ageTotalSpend?(ctx.parsed/ageTotalSpend*100).toFixed(1):0}%)`}} } }
-    });
-    document.getElementById('gadsAgePieChart-legend').innerHTML = agePieRows.map((r,i) => {
-      const pct = ageTotalSpend ? (r.spend/ageTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${ageColors[i]};flex-shrink:0"></span><span>${r['年齡層']} ${pct}%</span></div>`;
-    }).join('');
-    new Chart(document.getElementById('gadsAgeBarChart'), {
-      data:{ labels:ageBarRows.map(r=>r['年齡層']), datasets:[
-        {type:'bar',label:'花費',data:ageBarRows.map(r=>r.spend),backgroundColor:'#a8c8f8',borderColor:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
-        {type:'line',label:'ROAS',data:ageBarRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2',order:1}
-      ]},
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'花費 / ROAS（年齡）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
-    });
+        ${gadsTable(rows,[{label:dimKey,key:dimKey},...metricCols])}`;
+      container.appendChild(card);
+
+      const c1 = new Chart(document.getElementById(pieId), {
+        type:'doughnut',
+        data:{labels:rows.map(r=>r[dimKey]),datasets:[{data:rows.map(r=>r.spend),backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},
+        options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{
+          title:{display:true,text:`花費分佈（${dimKey}）`,font:{size:13,weight:'bold'},padding:{bottom:8}},
+          legend:{display:false},
+          tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${totalSpend?(ctx.parsed/totalSpend*100).toFixed(1):0}%)`}}
+        }}
+      });
+      document.getElementById(pieId+'-legend').innerHTML = rows.map((r,i)=>{
+        const pct=totalSpend?(r.spend/totalSpend*100).toFixed(1):'0';
+        return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${colors[i]};flex-shrink:0"></span><span>${r[dimKey]} ${pct}%</span></div>`;
+      }).join('');
+      const c2 = new Chart(document.getElementById(barId), {
+        data:{labels:barRows.map(r=>r[dimKey]),datasets:[
+          {type:'bar',label:'花費',data:barRows.map(r=>r.spend),backgroundColor:dimKey==='性別'?colors.map(c=>c+'88'):'#a8c8f8',borderColor:dimKey==='性別'?colors:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
+          {type:'line',label:'ROAS',data:barRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointRadius:4,tension:0.3,yAxisID:'y2',order:1}
+        ]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{title:{display:true,text:`花費 / ROAS（${dimKey}）`,font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}},
+          scales:{x:{grid:{display:false}},y:{position:'left',grid:{color:'#f0f0f0'}},y2:{position:'right',grid:{drawOnChartArea:false}}}
+        }
+      });
+      _gadsDemoCharts.push(c1, c2);
+    };
+
+    renderDemoCard(aRows,'年齡層','👥 年齡分析','gadsAgePieChart','gadsAgeBarChart',AGE_EXCL);
+    renderDemoCard(gRows,'性別','⚧ 性別分析','gadsGenderPieChart','gadsGenderBarChart',[]);
   }
 
-  if (genderRows.length) {
-    const gColors = genderRows.map(r=>r['性別']==='女性'?'#f74f7e':r['性別']==='男性'?'#4285f4':'#aaa');
-    const gTotalSpend = genderRows.reduce((s,r)=>s+r.spend, 0);
+  if (data.age.length || data.gender.length) {
     el.insertAdjacentHTML('beforeend', `
-      <div class="table-card" style="margin-top:20px">
-        <div class="table-header"><h3>⚧ 性別分析</h3></div>
-        <div style="display:flex;gap:24px;padding:20px;align-items:center">
-          <div style="flex:2;min-width:0">
-            <div style="position:relative;height:240px"><canvas id="gadsGenderPieChart"></canvas></div>
-            <div id="gadsGenderPieChart-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
-          </div>
-          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="gadsGenderBarChart"></canvas></div>
+      <div class="table-card" style="margin-top:20px;padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:13px;font-weight:600;color:#555">活動篩選</span>
+          <select id="gadsDemoFilter" style="font-size:13px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;min-width:260px">
+            <option value="">全部活動</option>
+            ${gadsDemoCamps.map(c=>`<option value="${encodeURIComponent(c)}">${c}</option>`).join('')}
+          </select>
         </div>
-        ${gadsTable(genderRows, [{label:'性別',key:'性別'},...metricCols])}
-      </div>`);
-    new Chart(document.getElementById('gadsGenderPieChart'), {
-      type:'doughnut', data:{ labels:genderRows.map(r=>r['性別']), datasets:[{data:genderRows.map(r=>r.spend), backgroundColor:gColors, borderWidth:2, borderColor:'#fff'}] },
-      options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ title:{display:true,text:'花費分佈（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}}, legend:{display:false}, tooltip:{callbacks:{label:ctx=>` ${fmtM(ctx.parsed)} (${gTotalSpend?(ctx.parsed/gTotalSpend*100).toFixed(1):0}%)`}} } }
-    });
-    document.getElementById('gadsGenderPieChart-legend').innerHTML = genderRows.map((r,i) => {
-      const pct = gTotalSpend ? (r.spend/gTotalSpend*100).toFixed(1) : '0';
-      return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0;white-space:nowrap"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${gColors[i]};flex-shrink:0"></span><span>${r['性別']} ${pct}%</span></div>`;
-    }).join('');
-    new Chart(document.getElementById('gadsGenderBarChart'), {
-      data:{ labels:genderRows.map(r=>r['性別']), datasets:[
-        {type:'bar',label:'花費',data:genderRows.map(r=>r.spend),backgroundColor:gColors.map(c=>c+'88'),borderColor:gColors,borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
-        {type:'line',label:'ROAS',data:genderRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointStyle:'circle',pointRadius:4,pointBackgroundColor:'#fff',pointBorderColor:'#e8833a',pointBorderWidth:2,tension:0.3,yAxisID:'y2',order:1}
-      ]},
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{title:{display:true,text:'花費 / ROAS（性別）',font:{size:13,weight:'bold'},padding:{bottom:8}},legend:{position:'top',labels:{font:{size:11},boxWidth:14,padding:12}}}, scales:{x:{grid:{display:false}},y:{position:'left',title:{display:true,text:'花費',font:{size:11}},grid:{color:'#f0f0f0'}},y2:{position:'right',title:{display:true,text:'ROAS',font:{size:11}},grid:{drawOnChartArea:false}}} }
-    });
+      </div>
+      <div id="gadsDemoCards"></div>`);
+    document.getElementById('gadsDemoFilter').addEventListener('change', e => drawGadsDemo(decodeURIComponent(e.target.value)));
+    drawGadsDemo('');
   }
 }
 
