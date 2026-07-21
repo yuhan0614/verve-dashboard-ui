@@ -968,9 +968,9 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       const metaDs = chart.data.datasets[0];
       const gadsDs = chart.data.datasets[1];
       ctx.save();
-      ctx.font = '10px sans-serif';
+      ctx.font = 'bold 10px sans-serif';
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
+      ctx.textBaseline = 'middle';
       metaDs.data.forEach((mv, i) => {
         const gv = gadsDs.data[i]||0;
         const total = mv + gv;
@@ -978,11 +978,21 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
         const meta_pct = Math.round(mv/total*100);
         const gads_pct = 100 - meta_pct;
         const xPos = x.getPixelForValue(i);
-        const yTop = y.getPixelForValue(total) - 4;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(`M${meta_pct}%/G${gads_pct}%`, xPos, yTop);
-        ctx.fillStyle = '#555';
-        ctx.fillText(`M${meta_pct}%/G${gads_pct}%`, xPos+0.5, yTop+0.5);
+        // Meta segment center (bottom portion)
+        const yMetaTop = y.getPixelForValue(mv);
+        const yBase    = y.getPixelForValue(0);
+        const metaH    = yBase - yMetaTop;
+        // Google segment center (top portion)
+        const yTotal   = y.getPixelForValue(total);
+        const gadsH    = yMetaTop - yTotal;
+        if (metaH > 14) {
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.fillText(`${meta_pct}%`, xPos, yMetaTop + metaH/2);
+        }
+        if (gadsH > 14) {
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.fillText(`${gads_pct}%`, xPos, yTotal + gadsH/2);
+        }
       });
       ctx.restore();
     }
