@@ -897,7 +897,8 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   const gByDate = {};
   gDays.forEach(r => { gByDate[r['日期']] = { spend: parseFloat(r['花費(TWD)'])||0, revenue: parseFloat(r['營收(TWD)'])||0 }; });
   const allDates = [...new Set([...Object.keys(metaByDate), ...Object.keys(gByDate)])].sort();
-  const dailySpend = allDates.map(d => (metaByDate[d]?.spend||0) + (gByDate[d]?.spend||0));
+  const dailyMetaSpend = allDates.map(d => metaByDate[d]?.spend||0);
+  const dailyGadsSpend = allDates.map(d => gByDate[d]?.spend||0);
   const dailyRoas  = allDates.map(d => {
     const s = (metaByDate[d]?.spend||0) + (gByDate[d]?.spend||0);
     const rv = (metaByDate[d]?.revenue||0) + (gByDate[d]?.revenue||0);
@@ -960,20 +961,49 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       </table></div>
     </div>`;
 
+  const pctLabelPlugin = {
+    id:'pctLabel',
+    afterDraw(chart) {
+      const {ctx, scales:{x,y}} = chart;
+      const metaDs = chart.data.datasets[0];
+      const gadsDs = chart.data.datasets[1];
+      ctx.save();
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      metaDs.data.forEach((mv, i) => {
+        const gv = gadsDs.data[i]||0;
+        const total = mv + gv;
+        if (!total) return;
+        const meta_pct = Math.round(mv/total*100);
+        const gads_pct = 100 - meta_pct;
+        const xPos = x.getPixelForValue(i);
+        const yTop = y.getPixelForValue(total) - 4;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`M${meta_pct}%/G${gads_pct}%`, xPos, yTop);
+        ctx.fillStyle = '#555';
+        ctx.fillText(`M${meta_pct}%/G${gads_pct}%`, xPos+0.5, yTop+0.5);
+      });
+      ctx.restore();
+    }
+  };
+
   if (overallSpendChart) overallSpendChart.destroy();
   overallSpendChart = new Chart(document.getElementById('overallSpendChart'), {
     data: { labels: allDates, datasets: [
-      { type:'bar',  label:'花費', data: dailySpend, backgroundColor:'rgba(82,196,26,0.3)', borderColor:'#52c41a', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
-      { type:'line', label:'ROAS', data: dailyRoas,  borderColor:'#1877f2', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
+      { type:'bar',  label:'Meta', data: dailyMetaSpend, backgroundColor:'rgba(24,119,242,0.5)', borderColor:'#1877f2', borderWidth:1, yAxisID:'y', order:2, stack:'spend' },
+      { type:'bar',  label:'Google', data: dailyGadsSpend, backgroundColor:'rgba(52,168,83,0.5)', borderColor:'#34a853', borderWidth:1, yAxisID:'y', order:2, stack:'spend' },
+      { type:'line', label:'ROAS', data: dailyRoas,  borderColor:'#f5a623', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
       scales: {
-        x:  { grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:12} },
-        y:  { position:'left',  beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
+        x:  { stacked:true, grid:{display:false}, ticks:{font:{size:10},maxTicksLimit:12} },
+        y:  { stacked:true, position:'left',  beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{callback:v=>'NT$'+Math.round(v/1000)+'K',font:{size:10}} },
         y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{callback:v=>v.toFixed(1)+'x',font:{size:10}} },
       }
-    }
+    },
+    plugins: [pctLabelPlugin]
   });
 
   if (overallPieChart) overallPieChart.destroy();
