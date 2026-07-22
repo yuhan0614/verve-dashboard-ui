@@ -883,21 +883,54 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       v.label = groupLabel(k); return v;
     });
   }
-  const metaSubRows = buildGroups(
+  // GA4 sub-row grouping by source
+  function ga4DateToYMD(d8) { return `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`; }
+  function buildGa4Groups(sources) {
+    const map = {};
+    sm.filter(r=>r.date>=sinceD&&r.date<=untilD&&sources.includes((r.sessionSourceMedium||'').toLowerCase()))
+      .forEach(r=>{
+        const k = groupKey(ga4DateToYMD(r.date));
+        map[k] = (map[k]||0) + parseFloat(r.totalRevenue||0);
+      });
+    return map;
+  }
+  const metaGa4Map = buildGa4Groups(META_SM);
+  const gadsGa4Map = buildGa4Groups(GOOGLE_SM);
+
+  function buildGroupsWithKey(rows, keyFn) {
+    const map = {};
+    rows.forEach(r => {
+      const k = keyFn(r);
+      if (!map[k]) map[k] = {spend:0,imp:0,clk:0,purchase:0,revenue:0,_key:k};
+      const g = map[k];
+      g.spend+=r.s||0; g.imp+=r.i||0; g.clk+=r.c||0; g.purchase+=r.p||0; g.revenue+=r.rv||0;
+    });
+    return Object.entries(map).sort((a,b)=>a[0]<b[0]?-1:1).map(([k,v])=>{
+      v.roas = v.spend>0?v.revenue/v.spend:0;
+      v.cpa  = v.purchase>0?v.spend/v.purchase:0;
+      v.ctr  = v.imp>0?v.clk/v.imp*100:0;
+      v.label = groupLabel(k); return v;
+    });
+  }
+  const metaSubRows = buildGroupsWithKey(
     metaDays.map(r=>({s:r.spend||0,i:r.impressions||0,c:r.link_clicks||0,p:r.purchase||0,rv:r.purchase_value||0,_k:groupKey(r.date_start)})),
     r=>r._k
   );
-  const gadsSubRows = buildGroups(
+  const gadsSubRows = buildGroupsWithKey(
     gDays.map(r=>({s:parseFloat(r['花費(TWD)'])||0,i:parseInt(r['曝光'])||0,c:parseInt(r['點擊'])||0,p:parseFloat(r['購買'])||0,rv:parseFloat(r['營收(TWD)'])||0,_k:groupKey(r['日期'])})),
     r=>r._k
   );
-  const subRowHTML = (rows, bg) => rows.map(v=>`<tr style="background:${bg};font-size:11px">
+  const subRowHTML = (rows, bg, ga4Map) => rows.map(v=>{
+    const ga4Rev = ga4Map[v._key]||0;
+    const ga4Roas = v.spend>0&&ga4Rev?ga4Rev/v.spend:0;
+    return `<tr style="background:${bg};font-size:11px">
     <td style="padding-left:28px;color:#888">${v.label}</td>
     <td>${fmtM(v.spend)}</td><td>${fmtN(v.imp)}</td><td>${fmtN(v.clk)}</td>
     <td>${fmtP(v.ctr)}</td><td>${fmtN(v.purchase,0)}</td><td>${fmtM(v.revenue)}</td>
     <td class="${rc(v.roas)}">${v.roas.toFixed(2)}x</td><td>${fmtM(v.cpa)}</td>
-    <td>—</td><td>—</td>
-  </tr>`).join('');
+    <td style="color:#2563eb">${ga4Rev?fmtM(ga4Rev):'—'}</td>
+    <td style="color:#2563eb">${ga4Roas?ga4Roas.toFixed(2)+'x':'—'}</td>
+  </tr>`;}).join('');
 
   // Combined
   const total = {
@@ -986,7 +1019,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
             <td style="color:#2563eb">${fmtM(ga4MetaRev)}</td>
             <td style="color:#2563eb">${meta.spend>0?(ga4MetaRev/meta.spend).toFixed(2)+'x':'—'}</td>
           </tr>
-          <tbody id="meta-sub" style="display:none">${subRowHTML(metaSubRows,'#f0f5ff')}</tbody>
+          <tbody id="meta-sub" style="display:none">${subRowHTML(metaSubRows,'#f0f5ff',metaGa4Map)}</tbody>
           <tr style="cursor:pointer" onclick="(function(el){const g=document.getElementById('gads-sub');const open=g.style.display!=='none';g.style.display=open?'none':'';el.querySelector('.tog').textContent=open?'▶':'▼';})(this)">
             <td><span class="tog" style="font-size:10px;margin-right:6px;color:#aaa">▶</span><strong style="color:#34a853">Google</strong></td>
             <td>${fmtM(gads.spend)}</td><td>${fmtN(gads.imp)}</td><td>${fmtN(gads.clk)}</td>
@@ -995,7 +1028,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
             <td style="color:#2563eb">${fmtM(ga4GoogleRev)}</td>
             <td style="color:#2563eb">${gads.spend>0?(ga4GoogleRev/gads.spend).toFixed(2)+'x':'—'}</td>
           </tr>
-          <tbody id="gads-sub" style="display:none">${subRowHTML(gadsSubRows,'#f0faf4')}</tbody>
+          <tbody id="gads-sub" style="display:none">${subRowHTML(gadsSubRows,'#f0faf4',gadsGa4Map)}</tbody>
           <tr style="background:#eff6ff;font-weight:600">
             <td>合計</td>
             <td>${fmtM(total.spend)}</td><td>${fmtN(total.imp)}</td><td>${fmtN(total.clk)}</td>
