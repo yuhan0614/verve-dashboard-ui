@@ -883,22 +883,6 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       v.label = groupLabel(k); return v;
     });
   }
-  // GA4 sub-row grouping by source
-  const sm_ = (ga4Cache?.daily_source_medium||[]);
-  const META_SM_  = ['facebook / cpc', 'facebook / paid'];
-  const GOOGLE_SM_ = ['google / cpc'];
-  function ga4DateToYMD(d8) { return `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`; }
-  function buildGa4Groups(sources) {
-    const map = {};
-    sm_.filter(r=>r.date>=sinceD&&r.date<=untilD&&sources.includes((r.sessionSourceMedium||'').toLowerCase()))
-      .forEach(r=>{
-        const k = groupKey(ga4DateToYMD(r.date));
-        map[k] = (map[k]||0) + parseFloat(r.totalRevenue||0);
-      });
-    return map;
-  }
-  const metaGa4Map = buildGa4Groups(META_SM_);
-  const gadsGa4Map = buildGa4Groups(GOOGLE_SM_);
 
   function buildGroupsWithKey(rows, keyFn) {
     const map = {};
@@ -970,6 +954,20 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   const prevGa4GoogleRev = sm.filter(r=>r.date>=prevSinceD&&r.date<=prevUntilD&&GOOGLE_SM.includes((r.sessionSourceMedium||'').toLowerCase())).reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
   const prevGa4Rev  = prevGa4MetaRev + prevGa4GoogleRev;
   const prevGa4Roas = prevTotal.spend > 0 ? prevGa4Rev/prevTotal.spend : 0;
+
+  // GA4 sub-row grouping by source
+  function ga4DateToYMD(d8) { return `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`; }
+  function buildGa4Groups(sources) {
+    const map = {};
+    sm.filter(r=>r.date>=sinceD&&r.date<=untilD&&sources.includes((r.sessionSourceMedium||'').toLowerCase()))
+      .forEach(r=>{
+        const k = groupKey(ga4DateToYMD(r.date));
+        map[k] = (map[k]||0) + parseFloat(r.totalRevenue||0);
+      });
+    return map;
+  }
+  const metaGa4Map = buildGa4Groups(META_SM);
+  const gadsGa4Map = buildGa4Groups(GOOGLE_SM);
 
   // Trend: align dates, compute daily total spend + ROAS
   const metaByDate = {};
