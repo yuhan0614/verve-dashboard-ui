@@ -884,12 +884,13 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
     });
   }
   // GA4 sub-row grouping by source
+  const sm_ = (ga4Cache?.daily_source_medium||[]);
   const META_SM_  = ['facebook / cpc', 'facebook / paid'];
   const GOOGLE_SM_ = ['google / cpc'];
   function ga4DateToYMD(d8) { return `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`; }
   function buildGa4Groups(sources) {
     const map = {};
-    sm.filter(r=>r.date>=sinceD&&r.date<=untilD&&sources.includes((r.sessionSourceMedium||'').toLowerCase()))
+    sm_.filter(r=>r.date>=sinceD&&r.date<=untilD&&sources.includes((r.sessionSourceMedium||'').toLowerCase()))
       .forEach(r=>{
         const k = groupKey(ga4DateToYMD(r.date));
         map[k] = (map[k]||0) + parseFloat(r.totalRevenue||0);
