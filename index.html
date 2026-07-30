@@ -2014,10 +2014,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
           if (barH < 16) continue;
           const midY = (bar.y + bar.base) / 2;
           const label = pct + '%';
-          const tw = ctx.measureText(label).width;
-          ctx.fillStyle = 'rgba(255,255,255,0.82)';
-          ctx.fillRect(bar.x - tw/2 - 3, midY - 7, tw + 6, 14);
-          ctx.fillStyle = '#222';
+          ctx.fillStyle = '#fff';
           ctx.fillText(label, bar.x, midY);
         }
       }
