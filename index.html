@@ -1812,7 +1812,13 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <div style="position:relative;height:260px"><canvas id="ga4TrendChart"></canvas></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
-      <h3>📡 每日流量來源分佈</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="margin:0">📡 每日流量來源分佈</h3>
+        <div id="chGroupToggle" style="display:flex;gap:6px">
+          <button onclick="switchChGroup('rev')" id="chGroupBtn_rev" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#10b981;color:#fff;font-size:12px;cursor:pointer;font-weight:600">營收</button>
+          <button onclick="switchChGroup('sess')" id="chGroupBtn_sess" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer">流量</button>
+        </div>
+      </div>
       <div style="position:relative;height:260px"><canvas id="ga4ChGroupChart"></canvas></div>
     </div>
     <div class="table-card">
@@ -1940,41 +1946,50 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   });
   const chSortedDates = Object.keys(chDateMap).sort();
   const chLabels = chSortedDates.map(d => d.slice(4,6)+'/'+d.slice(6,8));
-  const chRevDatasets = CH_GROUPS.map((g,i) => ({
-    type: 'bar',
-    label: g,
+  const _chRevDatasets = () => CH_GROUPS.map((g,i) => ({
+    type: 'bar', label: g,
     data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.rev||0)),
-    backgroundColor: CH_COLORS[i]+'cc',
-    borderColor: CH_COLORS[i],
-    borderWidth: 0,
-    stack: 'rev',
-    yAxisID: 'y',
+    backgroundColor: CH_COLORS[i]+'cc', borderWidth: 0, stack: 'v', yAxisID: 'y',
   }));
-  const chSessDataset = {
-    type: 'line',
-    label: '工作階段',
-    data: chSortedDates.map(d => Object.values(chDateMap[d]||{}).reduce((s,v)=>s+v.sess,0)),
-    borderColor: '#333',
-    borderWidth: 1.5,
-    pointRadius: 1.5,
-    tension: 0.3,
-    yAxisID: 'y2',
-    fill: false,
-  };
+  const _chSessDatasets = () => CH_GROUPS.map((g,i) => ({
+    type: 'bar', label: g,
+    data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.sess||0)),
+    backgroundColor: CH_COLORS[i]+'cc', borderWidth: 0, stack: 'v', yAxisID: 'y',
+  }));
+  const _chRevScales = () => ({
+    x: { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
+    y: { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>'$'+Math.round(v/1000)+'K'} },
+  });
+  const _chSessScales = () => ({
+    x: { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
+    y: { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v} },
+  });
   if (ga4ChGroupChart) ga4ChGroupChart.destroy();
   ga4ChGroupChart = new Chart(document.getElementById('ga4ChGroupChart'), {
-    data: { labels: chLabels, datasets: [...chRevDatasets, chSessDataset] },
+    data: { labels: chLabels, datasets: _chRevDatasets() },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode:'index', intersect:false },
       plugins: { legend: { position:'top', labels:{font:{size:10},boxWidth:10,padding:10} } },
-      scales: {
-        x:  { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
-        y:  { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>'$'+Math.round(v/1000)+'K'} },
-        y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v} },
-      }
+      scales: _chRevScales(),
     }
   });
+  window.switchChGroup = function(mode) {
+    const btnRev  = document.getElementById('chGroupBtn_rev');
+    const btnSess = document.getElementById('chGroupBtn_sess');
+    if (mode === 'rev') {
+      btnRev.style.background='#10b981'; btnRev.style.color='#fff'; btnRev.style.borderColor='#10b981';
+      btnSess.style.background='#fff'; btnSess.style.color='#555'; btnSess.style.borderColor='#d9d9d9';
+      ga4ChGroupChart.data.datasets = _chRevDatasets();
+      ga4ChGroupChart.options.scales = _chRevScales();
+    } else {
+      btnSess.style.background='#10b981'; btnSess.style.color='#fff'; btnSess.style.borderColor='#10b981';
+      btnRev.style.background='#fff'; btnRev.style.color='#555'; btnRev.style.borderColor='#d9d9d9';
+      ga4ChGroupChart.data.datasets = _chSessDatasets();
+      ga4ChGroupChart.options.scales = _chSessScales();
+    }
+    ga4ChGroupChart.update();
+  };
 
   if (ga4TrendChart) ga4TrendChart.destroy();
   ga4TrendChart = new Chart(document.getElementById('ga4TrendChart'), {
