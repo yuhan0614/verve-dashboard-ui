@@ -63,6 +63,16 @@ def sl_agg(orders):
 def update_shopline():
     with open("sl_cache.json") as f:
         cache = json.load(f)
+    try:
+        with open("sl_items_cache.json") as f:
+            items_cache = json.load(f)
+    except FileNotFoundError:
+        items_cache = {}
+    try:
+        with open("sl_discounts_cache.json") as f:
+            disc_cache = json.load(f)
+    except FileNotFoundError:
+        disc_cache = {}
 
     for i in range(DAYS_BACK, -1, -1):
         d = (TODAY - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -71,12 +81,44 @@ def update_shopline():
         try:
             orders = sl_fetch(start, end)
             cache[d] = sl_agg(orders)
-            print(f"[SL] {d}: {len(orders)} orders, gmv={cache[d]['gmv']}")
+
+            items_map, disc_map = {}, {}
+            for o in orders:
+                if o.get("status") == "cancelled":
+                    continue
+                for item in (o.get("subtotal_items") or []):
+                    if item.get("item_type") not in ("Product", "AddonProduct"):
+                        continue
+                    tr = item.get("title_translations") or {}
+                    name = tr.get("zh-hant") or tr.get("en") or "未知商品"
+                    qty  = item.get("quantity", 0) or 0
+                    rev  = (item.get("total") or {}).get("dollars", 0) or 0
+                    if name not in items_map:
+                        items_map[name] = {"name": name, "qty": 0, "revenue": 0}
+                    items_map[name]["qty"]     += qty
+                    items_map[name]["revenue"] += round(rev)
+                for promo in (o.get("promotion_items") or []):
+                    code = promo.get("coupon_code") or ""
+                    if not code:
+                        continue
+                    disc = (promo.get("discounted_amount") or {}).get("dollars", 0) or 0
+                    if code not in disc_map:
+                        disc_map[code] = {"code": code, "count": 0, "discount": 0}
+                    disc_map[code]["count"]    += 1
+                    disc_map[code]["discount"] += round(disc)
+
+            items_cache[d] = list(items_map.values())
+            disc_cache[d]  = list(disc_map.values())
+            print(f"[SL] {d}: {len(orders)} orders, gmv={cache[d]['gmv']}, products={len(items_map)}, coupons={len(disc_map)}")
         except Exception as e:
             print(f"[SL] {d} error: {e}")
 
     with open("sl_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
+    with open("sl_items_cache.json", "w") as f:
+        json.dump(items_cache, f, ensure_ascii=False)
+    with open("sl_discounts_cache.json", "w") as f:
+        json.dump(disc_cache, f, ensure_ascii=False)
 
 # ── GA4 ──────────────────────────────────────────────────────────────────────
 

@@ -357,14 +357,20 @@ async function fetchData(forceRefresh = false) {
       daily_items:         [],
       daily_search:        [],
     };
-    // lazy load items + search in background
+    // lazy load items + search + SL product/discount data in background
+    let slItemsCache = {}, slDiscCache = {};
     Promise.all([
       cachedFetch('./ga4_items.json'),
       cachedFetch('./ga4_search.json'),
-    ]).then(([itemsTxt, searchTxt]) => {
+      cachedFetch('./sl_items_cache.json'),
+      cachedFetch('./sl_discounts_cache.json'),
+    ]).then(([itemsTxt, searchTxt, slItemsTxt, slDiscTxt]) => {
       ga4Cache.daily_items  = JSON.parse(itemsTxt);
       ga4Cache.daily_search = JSON.parse(searchTxt);
+      slItemsCache = JSON.parse(slItemsTxt);
+      slDiscCache  = JSON.parse(slDiscTxt);
       renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
+      renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData, slItemsCache, slDiscCache, ga4Cache.daily_items);
     });
 
     renderOverall(trendData, gDaily, since, until, ageData, genderData, gAge, gGender, prevTrendData, prev, ga4Cache);
@@ -1562,6 +1568,21 @@ function renderGoogleKeyword(kwRows) {
     </div>`;
 }
 
+// ── Shared table helpers ──────────────────────────────────────
+const _rowH = 38;
+function collapseTable(rows, rowFn, hd) {
+  const visH = 8 * _rowH + 40;
+  return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
+    <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
+  </div></div>`;
+}
+function scrollTable(rows, rowFn, hd) {
+  const visH = 10 * _rowH + 40;
+  return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
+    <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
+  </div></div>`;
+}
+
 // ── GA4 ──────────────────────────────────────────────────────
 let ga4TrendChart = null;
 let ga4ChGroupChart = null;
@@ -1764,21 +1785,6 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <td ${R}>${revPct.toFixed(1)}%<br>${diffBadge(revPct,prevRevPct)}</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
     </tr>`;
-  };
-
-  const rowH = 38;
-  const scrollTable = (rows, rowFn, hd) => {
-    const visH = 10 * rowH + 40;
-    return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
-      <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
-    </div></div>`;
-  };
-
-  const collapseTable = (rows, rowFn, hd, tableId) => {
-    const visH = 8 * rowH + 40;
-    return `<div style="overflow-x:auto"><div style="max-height:${visH}px;overflow-y:auto">
-      <table><thead style="position:sticky;top:0;z-index:2">${hd}</thead><tbody>${rows.map(rowFn).join('')}</tbody></table>
-    </div></div>`;
   };
 
   // 餅圖資料：只列出 revenue > 5% 的管道，其餘歸入其他
@@ -2092,7 +2098,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 }
 
 let sholineTrendChart = null;
-function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendData) {
+function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendData, slItemsCache, slDiscCache, ga4Items) {
   const mapEntries = (s, u) => Object.entries(json)
     .filter(([d]) => d >= s && d <= u)
     .map(([d, v]) => ({ date:d, gmv:v.gmv||0, revenue:v.revenue||0, orders:v.orders||0, returns:v.returns||0, cancelled:v.cancelled||0, sessions:v.sessions||0, cvr:v.cvr||0, aov:v.aov||0 }))
@@ -2172,7 +2178,101 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
           </tr>`;
         }).join('')}</tbody>
       </table></div>
-    </div>`;
+    </div>
+    ${(() => {
+      // ── 熱門品項 ──
+      if (!slItemsCache || !Object.keys(slItemsCache).length) return '';
+      const itemMap = {};
+      Object.entries(slItemsCache).filter(([d]) => d >= since && d <= until).forEach(([, rows]) => {
+        rows.forEach(r => {
+          if (!itemMap[r.name]) itemMap[r.name] = {name: r.name, qty: 0, revenue: 0};
+          itemMap[r.name].qty     += r.qty;
+          itemMap[r.name].revenue += r.revenue;
+        });
+      });
+      const topItems = Object.values(itemMap).sort((a,b) => b.qty - a.qty).slice(0, 15);
+      if (!topItems.length) return '';
+      const maxQty = topItems[0].qty;
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header"><h3>🏆 熱門品項</h3><span style="font-size:11px;color:#aaa">依銷售量排序</span></div>
+        ${collapseTable(topItems, (r,i) => `<tr>
+          <td style="color:#aaa;width:28px;text-align:center">${i+1}</td>
+          <td>${r.name}</td>
+          <td style="min-width:120px">
+            <div style="background:#f0f0f0;border-radius:4px;height:8px;overflow:hidden">
+              <div style="background:#6366f1;height:100%;width:${(r.qty/maxQty*100).toFixed(0)}%;border-radius:4px"></div>
+            </div>
+          </td>
+          <td style="text-align:right;font-weight:600">${r.qty.toLocaleString()} 件</td>
+          <td style="text-align:right;color:#10b981">${fmtM(r.revenue)}</td>
+        </tr>`,
+        `<tr><th style="width:28px">#</th><th>商品名稱</th><th>銷量佔比</th><th style="text-align:right">銷售量</th><th style="text-align:right">營收</th></tr>`,
+        'sl-top-items')}
+      </div>`;
+    })()}
+    ${(() => {
+      // ── 有潛力品項 ──
+      if (!ga4Items || !ga4Items.length) return '';
+      const sinceD = since.replace(/-/g,''), untilD = until.replace(/-/g,'');
+      const imap = {};
+      ga4Items.filter(r => r.date >= sinceD && r.date <= untilD).forEach(r => {
+        const k = r.itemName||'';
+        if (!k) return;
+        if (!imap[k]) imap[k] = {name:k, views:0, atc:0, purchased:0, revenue:0};
+        imap[k].views     += parseFloat(r.itemsViewed||0);
+        imap[k].atc       += parseFloat(r.itemsAddedToCart||0);
+        imap[k].purchased += parseFloat(r.itemsPurchased||0);
+        imap[k].revenue   += parseFloat(r.itemRevenue||0);
+      });
+      const allItems = Object.values(imap).filter(r => r.views >= 20);
+      if (!allItems.length) return '';
+      const medianViews = allItems.map(r=>r.views).sort((a,b)=>a-b)[Math.floor(allItems.length/2)];
+      const potential = allItems
+        .map(r => ({...r, cvr: r.views>0?r.purchased/r.views*100:0, atcRate: r.views>0?r.atc/r.views*100:0}))
+        .filter(r => r.views >= medianViews && r.cvr < 2)
+        .sort((a,b) => b.views - a.views)
+        .slice(0, 15);
+      if (!potential.length) return '';
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header"><h3>💡 有潛力品項</h3><span style="font-size:11px;color:#aaa">高瀏覽但轉換率 &lt; 2%，值得優化</span></div>
+        ${collapseTable(potential, r => `<tr>
+          <td>${r.name}</td>
+          <td style="text-align:right">${r.views.toLocaleString()}</td>
+          <td style="text-align:right">${r.atcRate.toFixed(1)}%</td>
+          <td style="text-align:right;color:#f5222d;font-weight:600">${r.cvr.toFixed(2)}%</td>
+          <td style="text-align:right;color:#aaa">${fmtM(r.revenue)}</td>
+        </tr>`,
+        `<tr><th>商品名稱</th><th style="text-align:right">瀏覽數</th><th style="text-align:right">加購率</th><th style="text-align:right">轉換率</th><th style="text-align:right">營收</th></tr>`,
+        'sl-potential')}
+      </div>`;
+    })()}
+    ${(() => {
+      // ── 折扣碼使用 ──
+      if (!slDiscCache || !Object.keys(slDiscCache).length) return '';
+      const discMap = {};
+      Object.entries(slDiscCache).filter(([d]) => d >= since && d <= until).forEach(([, rows]) => {
+        rows.forEach(r => {
+          if (!discMap[r.code]) discMap[r.code] = {code: r.code, count: 0, discount: 0};
+          discMap[r.code].count    += r.count;
+          discMap[r.code].discount += r.discount;
+        });
+      });
+      const discRows = Object.values(discMap).sort((a,b) => b.count - a.count);
+      if (!discRows.length) return '<div class="table-card" style="margin-top:14px"><div class="table-header"><h3>🎟️ 折扣碼使用</h3></div><div style="padding:16px;color:#aaa;font-size:13px">此區間無折扣碼使用紀錄</div></div>';
+      const totalDisc = discRows.reduce((s,r)=>s+r.discount,0);
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header"><h3>🎟️ 折扣碼使用</h3><span style="font-size:11px;color:#aaa">總折扣 ${fmtM(totalDisc)}</span></div>
+        ${collapseTable(discRows, r => `<tr>
+          <td style="font-family:monospace;font-weight:600;letter-spacing:0.5px">${r.code}</td>
+          <td style="text-align:right">${r.count.toLocaleString()} 次</td>
+          <td style="text-align:right;color:#f5222d">${fmtM(r.discount)}</td>
+          <td style="text-align:right;color:#aaa">${totalDisc>0?(r.discount/totalDisc*100).toFixed(1)+'%':'—'}</td>
+        </tr>`,
+        `<tr><th>折扣碼</th><th style="text-align:right">使用次數</th><th style="text-align:right">折扣金額</th><th style="text-align:right">佔比</th></tr>`,
+        'sl-discounts')}
+      </div>`;
+    })()}
+`;
 
   if (sholineTrendChart) sholineTrendChart.destroy();
   sholineTrendChart = new Chart(document.getElementById('sholineTrendChart'), {
