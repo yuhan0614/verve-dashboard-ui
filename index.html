@@ -1564,6 +1564,7 @@ function renderGoogleKeyword(kwRows) {
 
 // ── GA4 ──────────────────────────────────────────────────────
 let ga4TrendChart = null;
+let ga4ChGroupChart = null;
 function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) {
   const fmt  = n => Number(n||0).toLocaleString('en');
   const fmtR = n => 'NT$' + Math.round(n||0).toLocaleString('en');
@@ -1810,6 +1811,10 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <h3>📅 每日趨勢</h3>
       <div style="position:relative;height:260px"><canvas id="ga4TrendChart"></canvas></div>
     </div>
+    <div class="chart-card" style="margin-bottom:20px">
+      <h3>📡 每日流量來源分佈</h3>
+      <div style="position:relative;height:260px"><canvas id="ga4ChGroupChart"></canvas></div>
+    </div>
     <div class="table-card">
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
       ${scrollTable(daily, dRow, thead)}
@@ -1910,6 +1915,66 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       </div>`;
     })()}
 `;
+
+  // ── 每日流量來源分佈 chart ──
+  const CH_GROUPS = ['廣告','Direct','Line推播','自然搜尋','社群','其他'];
+  const CH_COLORS = ['#4285f4','#8c8c8c','#00B900','#fa8c16','#722ed1','#bfbfbf'];
+  function classifySourceMedium(srcMed) {
+    const s = (srcMed||'').toLowerCase();
+    if (['google / cpc','facebook / cpc','facebook / paid'].includes(s)) return '廣告';
+    if (s === '(direct) / (none)') return 'Direct';
+    if (s.includes('omnichat')) return 'Line推播';
+    if (s.includes('organic')) return '自然搜尋';
+    if (s.includes('facebook') || s.includes('instagram') || s.includes('igshopping') || s.includes('social')) return '社群';
+    return '其他';
+  }
+  const smRows = (cache.daily_source_medium||[]).filter(r => r.date >= sinceD && r.date <= untilD);
+  const chDateMap = {};
+  smRows.forEach(r => {
+    const d = r.date;
+    const g = classifySourceMedium(r.sessionSourceMedium);
+    if (!chDateMap[d]) chDateMap[d] = {};
+    if (!chDateMap[d][g]) chDateMap[d][g] = {rev:0, sess:0};
+    chDateMap[d][g].rev  += parseFloat(r.totalRevenue||0);
+    chDateMap[d][g].sess += parseFloat(r.sessions||0);
+  });
+  const chSortedDates = Object.keys(chDateMap).sort();
+  const chLabels = chSortedDates.map(d => d.slice(4,6)+'/'+d.slice(6,8));
+  const chRevDatasets = CH_GROUPS.map((g,i) => ({
+    type: 'bar',
+    label: g,
+    data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.rev||0)),
+    backgroundColor: CH_COLORS[i]+'cc',
+    borderColor: CH_COLORS[i],
+    borderWidth: 0,
+    stack: 'rev',
+    yAxisID: 'y',
+  }));
+  const chSessDataset = {
+    type: 'line',
+    label: '工作階段',
+    data: chSortedDates.map(d => Object.values(chDateMap[d]||{}).reduce((s,v)=>s+v.sess,0)),
+    borderColor: '#333',
+    borderWidth: 1.5,
+    pointRadius: 1.5,
+    tension: 0.3,
+    yAxisID: 'y2',
+    fill: false,
+  };
+  if (ga4ChGroupChart) ga4ChGroupChart.destroy();
+  ga4ChGroupChart = new Chart(document.getElementById('ga4ChGroupChart'), {
+    data: { labels: chLabels, datasets: [...chRevDatasets, chSessDataset] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode:'index', intersect:false },
+      plugins: { legend: { position:'top', labels:{font:{size:10},boxWidth:10,padding:10} } },
+      scales: {
+        x:  { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
+        y:  { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>'$'+Math.round(v/1000)+'K'} },
+        y2: { position:'right', beginAtZero:true, grid:{display:false}, ticks:{font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(0)+'K':v} },
+      }
+    }
+  });
 
   if (ga4TrendChart) ga4TrendChart.destroy();
   ga4TrendChart = new Chart(document.getElementById('ga4TrendChart'), {
