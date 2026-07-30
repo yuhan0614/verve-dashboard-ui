@@ -342,7 +342,7 @@ async function fetchData(forceRefresh = false) {
     const sholineJson  = await sholineRes.json();
     const ga4Cache     = await ga4Res.json();
 
-    renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender, prevTrendData, prev, ga4Cache);
+    renderOverall(trendData, gDaily, since, until, ageData, genderData, gAge, gGender, prevTrendData, prev, ga4Cache);
     renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
     renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData);
     renderPerf(campData, trendData, since, until, prevTrendData);
