@@ -104,15 +104,19 @@ def update_shopline():
                     items_map[name]["revenue"] += round(rev)
                     items_map[name]["gender"][gender]["qty"]     += qty
                     items_map[name]["gender"][gender]["revenue"] += round(rev)
+                o_rev = (o.get("total") or {}).get("dollars", 0) or 0
                 for promo in (o.get("promotion_items") or []):
                     code = promo.get("coupon_code") or ""
                     if not code:
                         continue
-                    disc = (promo.get("discounted_amount") or {}).get("dollars", 0) or 0
+                    disc  = (promo.get("discounted_amount") or {}).get("dollars", 0) or 0
+                    tr2   = (promo.get("promotion") or {}).get("title_translations") or {}
+                    title = tr2.get("zh-hant") or tr2.get("en") or code
                     if code not in disc_map:
-                        disc_map[code] = {"code": code, "count": 0, "discount": 0}
+                        disc_map[code] = {"code": code, "title": title, "count": 0, "discount": 0, "revenue": 0}
                     disc_map[code]["count"]    += 1
                     disc_map[code]["discount"] += round(disc)
+                    disc_map[code]["revenue"]  += round(o_rev)
 
             items_cache[d] = list(items_map.values())
             disc_cache[d]  = list(disc_map.values())

@@ -2293,9 +2293,11 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
       const discMap = {};
       Object.entries(slDiscCache).filter(([d]) => d >= since && d <= until).forEach(([, rows]) => {
         rows.forEach(r => {
-          if (!discMap[r.code]) discMap[r.code] = {code: r.code, count: 0, discount: 0};
+          if (!discMap[r.code]) discMap[r.code] = {code: r.code, title: r.title||r.code, count: 0, discount: 0, revenue: 0};
           discMap[r.code].count    += r.count;
           discMap[r.code].discount += r.discount;
+          discMap[r.code].revenue  += r.revenue||0;
+          if (r.title) discMap[r.code].title = r.title;
         });
       });
       const discRows = Object.values(discMap).sort((a,b) => b.count - a.count);
@@ -2304,12 +2306,14 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
       return `<div class="table-card" style="margin-top:14px">
         <div class="table-header"><h3>🎟️ 折扣碼使用</h3><span style="font-size:11px;color:#aaa">總折扣 ${fmtM(totalDisc)}</span></div>
         ${collapseTable(discRows, r => `<tr>
-          <td style="font-family:monospace;font-weight:600;letter-spacing:0.5px">${r.code}</td>
+          <td>${r.title}</td>
+          <td style="font-family:monospace;font-size:11px;color:#aaa">${r.code}</td>
           <td style="text-align:right">${r.count.toLocaleString()} 次</td>
           <td style="text-align:right;color:#f5222d">${fmtM(r.discount)}</td>
+          <td style="text-align:right;color:#10b981">${fmtM(r.revenue)}</td>
           <td style="text-align:right;color:#aaa">${totalDisc>0?(r.discount/totalDisc*100).toFixed(1)+'%':'—'}</td>
         </tr>`,
-        `<tr><th>折扣碼</th><th style="text-align:right">使用次數</th><th style="text-align:right">折扣金額</th><th style="text-align:right">佔比</th></tr>`,
+        `<tr><th>優惠名稱</th><th>折扣碼</th><th style="text-align:right">使用次數</th><th style="text-align:right">折扣金額</th><th style="text-align:right">總成交額</th><th style="text-align:right">佔比</th></tr>`,
         'sl-discounts')}
       </div>`;
     })()}
