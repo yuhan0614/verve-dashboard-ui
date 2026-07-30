@@ -1814,11 +1814,12 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     <div class="chart-card" style="margin-bottom:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <h3 style="margin:0">📡 每日流量來源分佈</h3>
-        <div id="chGroupToggle" style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px">
           <button onclick="switchChGroup('rev')" id="chGroupBtn_rev" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#10b981;color:#fff;font-size:12px;cursor:pointer;font-weight:600">營收</button>
           <button onclick="switchChGroup('sess')" id="chGroupBtn_sess" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer">流量</button>
         </div>
       </div>
+      <div id="chGroupPctBar" style="display:flex;border-radius:6px;overflow:hidden;height:22px;margin-bottom:10px"></div>
       <div style="position:relative;height:260px"><canvas id="ga4ChGroupChart"></canvas></div>
     </div>
     <div class="table-card">
@@ -1924,7 +1925,8 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   // ── 每日流量來源分佈 chart ──
   const CH_GROUPS = ['廣告','Direct','Line推播','自然搜尋','社群','其他'];
-  const CH_COLORS = ['#4285f4','#8c8c8c','#00B900','#fa8c16','#722ed1','#bfbfbf'];
+  const CH_COLORS = ['#6366f1','#94a3b8','#10b981','#f59e0b','#f472b6','#cbd5e1'];
+
   function classifySourceMedium(srcMed) {
     const s = (srcMed||'').toLowerCase();
     if (['google / cpc','facebook / cpc','facebook / paid'].includes(s)) return '廣告';
@@ -1934,6 +1936,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     if (s.includes('facebook') || s.includes('instagram') || s.includes('igshopping') || s.includes('social')) return '社群';
     return '其他';
   }
+
   const smRows = (cache.daily_source_medium||[]).filter(r => r.date >= sinceD && r.date <= untilD);
   const chDateMap = {};
   smRows.forEach(r => {
@@ -1944,51 +1947,109 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     chDateMap[d][g].rev  += parseFloat(r.totalRevenue||0);
     chDateMap[d][g].sess += parseFloat(r.sessions||0);
   });
+
+  // totals for pct bar
+  const chTotals = { rev:{}, sess:{} };
+  CH_GROUPS.forEach(g => { chTotals.rev[g] = 0; chTotals.sess[g] = 0; });
+  Object.values(chDateMap).forEach(dm => {
+    CH_GROUPS.forEach(g => {
+      chTotals.rev[g]  += dm[g]?.rev  || 0;
+      chTotals.sess[g] += dm[g]?.sess || 0;
+    });
+  });
+
+  function renderPctBar(mode) {
+    const el = document.getElementById('chGroupPctBar');
+    if (!el) return;
+    const vals = CH_GROUPS.map(g => mode === 'rev' ? chTotals.rev[g] : chTotals.sess[g]);
+    const total = vals.reduce((s,v)=>s+v, 0);
+    if (!total) return;
+    el.innerHTML = CH_GROUPS.map((g,i) => {
+      const pct = vals[i] / total * 100;
+      if (pct < 0.5) return '';
+      const label = pct >= 7 ? `${g} ${pct.toFixed(0)}%` : pct >= 3.5 ? `${pct.toFixed(0)}%` : '';
+      return `<div title="${g}: ${pct.toFixed(1)}%" style="flex:${pct};background:${CH_COLORS[i]};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;overflow:hidden;white-space:nowrap;min-width:0">${label}</div>`;
+    }).join('');
+  }
+
   const chSortedDates = Object.keys(chDateMap).sort();
   const chLabels = chSortedDates.map(d => d.slice(4,6)+'/'+d.slice(6,8));
-  const _chRevDatasets = () => CH_GROUPS.map((g,i) => ({
+
+  const _chDatasets = (key) => CH_GROUPS.map((g,i) => ({
     type: 'bar', label: g,
-    data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.rev||0)),
-    backgroundColor: CH_COLORS[i]+'cc', borderWidth: 0, stack: 'v', yAxisID: 'y',
+    data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.[key]||0)),
+    backgroundColor: CH_COLORS[i]+'d9', borderWidth: 0, stack: 'v', yAxisID: 'y',
   }));
-  const _chSessDatasets = () => CH_GROUPS.map((g,i) => ({
-    type: 'bar', label: g,
-    data: chSortedDates.map(d => Math.round(chDateMap[d]?.[g]?.sess||0)),
-    backgroundColor: CH_COLORS[i]+'cc', borderWidth: 0, stack: 'v', yAxisID: 'y',
-  }));
-  const _chRevScales = () => ({
+  const _chScales = (isRev) => ({
     x: { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
-    y: { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>'$'+Math.round(v/1000)+'K'} },
+    y: { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'},
+         ticks:{font:{size:10}, callback: isRev ? v=>'$'+Math.round(v/1000)+'K' : v=>v>=1000?(v/1000).toFixed(1)+'K':v} },
   });
-  const _chSessScales = () => ({
-    x: { grid:{display:false}, stacked:true, ticks:{font:{size:10},maxTicksLimit:14} },
-    y: { position:'left', stacked:true, beginAtZero:true, grid:{color:'#f0f2f5'}, ticks:{font:{size:10},callback:v=>v>=1000?(v/1000).toFixed(1)+'K':v} },
-  });
+
+  // afterDraw plugin: % labels inside each bar segment
+  const chGroupPctPlugin = {
+    id: 'chGroupPct',
+    afterDraw(chart) {
+      const {ctx, data} = chart;
+      const nDs = data.datasets.length;
+      const nBars = data.labels.length;
+      ctx.save();
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let bi = 0; bi < nBars; bi++) {
+        let total = 0;
+        for (let di = 0; di < nDs; di++) total += data.datasets[di].data[bi] || 0;
+        if (!total) continue;
+        for (let di = 0; di < nDs; di++) {
+          const meta = chart.getDatasetMeta(di);
+          if (meta.hidden) continue;
+          const bar = meta.data[bi];
+          if (!bar) continue;
+          const val = data.datasets[di].data[bi] || 0;
+          if (!val) continue;
+          const pct = Math.round(val / total * 100);
+          if (pct < 5) continue;
+          const barH = Math.abs(bar.base - bar.y);
+          if (barH < 16) continue;
+          const midY = (bar.y + bar.base) / 2;
+          const label = pct + '%';
+          const tw = ctx.measureText(label).width;
+          ctx.fillStyle = 'rgba(255,255,255,0.82)';
+          ctx.fillRect(bar.x - tw/2 - 3, midY - 7, tw + 6, 14);
+          ctx.fillStyle = '#222';
+          ctx.fillText(label, bar.x, midY);
+        }
+      }
+      ctx.restore();
+    }
+  };
+
   if (ga4ChGroupChart) ga4ChGroupChart.destroy();
   ga4ChGroupChart = new Chart(document.getElementById('ga4ChGroupChart'), {
-    data: { labels: chLabels, datasets: _chRevDatasets() },
+    data: { labels: chLabels, datasets: _chDatasets('rev') },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode:'index', intersect:false },
       plugins: { legend: { position:'top', labels:{font:{size:10},boxWidth:10,padding:10} } },
-      scales: _chRevScales(),
-    }
+      scales: _chScales(true),
+    },
+    plugins: [chGroupPctPlugin],
   });
+  renderPctBar('rev');
+
   window.switchChGroup = function(mode) {
     const btnRev  = document.getElementById('chGroupBtn_rev');
     const btnSess = document.getElementById('chGroupBtn_sess');
-    if (mode === 'rev') {
-      btnRev.style.background='#10b981'; btnRev.style.color='#fff'; btnRev.style.borderColor='#10b981';
-      btnSess.style.background='#fff'; btnSess.style.color='#555'; btnSess.style.borderColor='#d9d9d9';
-      ga4ChGroupChart.data.datasets = _chRevDatasets();
-      ga4ChGroupChart.options.scales = _chRevScales();
-    } else {
-      btnSess.style.background='#10b981'; btnSess.style.color='#fff'; btnSess.style.borderColor='#10b981';
-      btnRev.style.background='#fff'; btnRev.style.color='#555'; btnRev.style.borderColor='#d9d9d9';
-      ga4ChGroupChart.data.datasets = _chSessDatasets();
-      ga4ChGroupChart.options.scales = _chSessScales();
-    }
+    const isRev = mode === 'rev';
+    btnRev.style.cssText  = isRev  ? 'padding:4px 14px;border-radius:20px;border:1px solid #10b981;background:#10b981;color:#fff;font-size:12px;cursor:pointer;font-weight:600'
+                                    : 'padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer';
+    btnSess.style.cssText = !isRev ? 'padding:4px 14px;border-radius:20px;border:1px solid #10b981;background:#10b981;color:#fff;font-size:12px;cursor:pointer;font-weight:600'
+                                   : 'padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer';
+    ga4ChGroupChart.data.datasets = _chDatasets(isRev ? 'rev' : 'sess');
+    ga4ChGroupChart.options.scales = _chScales(isRev);
     ga4ChGroupChart.update();
+    renderPctBar(mode);
   };
 
   if (ga4TrendChart) ga4TrendChart.destroy();
