@@ -60,9 +60,39 @@ def sl_agg(orders):
         "aov":      round(gmv / order_count) if order_count else 0,
     }
 
+def fetch_product_gender_map():
+    result = {}
+    url = f"{SL_BASE}/products"
+    params = {"per_page": 250, "fields": "title_translations,tags"}
+    while url:
+        resp = requests.get(url, headers=SL_HEADS, params=params, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        for p in (data.get("items") or []):
+            name = (p.get("title_translations") or {}).get("zh-hant") or ""
+            if not name:
+                continue
+            tags = p.get("tags") or []
+            has_male   = any("男裝" in t for t in tags)
+            has_female = any("女裝" in t for t in tags)
+            if has_male and not has_female:
+                result[name] = "male"
+            elif has_female and not has_male:
+                result[name] = "female"
+            else:
+                result[name] = "other"
+        last_id = data.get("last_id")
+        if not last_id or not data.get("items"):
+            break
+        url = f"{SL_BASE}/products"
+        params = {"per_page": 250, "fields": "title_translations,tags", "previous_id": last_id}
+    print(f"[SL] product gender map: {len(result)} products")
+    return result
+
 def update_shopline():
     with open("sl_cache.json") as f:
         cache = json.load(f)
+    product_gender = fetch_product_gender_map()
     try:
         with open("sl_items_cache.json") as f:
             items_cache = json.load(f)
@@ -97,6 +127,7 @@ def update_shopline():
                     rev  = (item.get("total") or {}).get("dollars", 0) or 0
                     if name not in items_map:
                         items_map[name] = {"name": name, "qty": 0, "revenue": 0,
+                                           "category": product_gender.get(name, "other"),
                                            "gender": {"male":   {"qty": 0, "revenue": 0},
                                                       "female": {"qty": 0, "revenue": 0},
                                                       "other":  {"qty": 0, "revenue": 0}}}

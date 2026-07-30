@@ -2224,11 +2224,10 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
       if (!allItemsBase.length) return '';
 
       function renderTopItemsTable(mode) {
-        const rows = allItemsBase.map(r => {
-          const qty     = mode==='all' ? r.qty     : (r.gender[mode]||{}).qty||0;
-          const revenue = mode==='all' ? r.revenue : (r.gender[mode]||{}).revenue||0;
-          return {...r, _qty: qty, _rev: revenue};
-        }).filter(r => r._qty > 0).sort((a,b) => b._qty - a._qty).slice(0, 15);
+        const rows = allItemsBase
+          .filter(r => mode==='all' || r.category===mode)
+          .map(r => ({...r, _qty: r.qty, _rev: r.revenue}))
+          .filter(r => r._qty > 0).sort((a,b) => b._qty - a._qty).slice(0, 15);
         if (!rows.length) return '<div style="padding:16px;color:#aaa;font-size:13px">此性別無銷售資料</div>';
         const maxQ = rows[0]._qty;
         return collapseTable(rows, (r,i) => `<tr>
