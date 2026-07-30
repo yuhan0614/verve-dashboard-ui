@@ -86,6 +86,8 @@ def update_shopline():
             for o in orders:
                 if o.get("status") == "cancelled":
                     continue
+                gender_raw = (o.get("customer_info") or {}).get("gender", "") or ""
+                gender = gender_raw if gender_raw in ("male", "female") else "other"
                 for item in (o.get("subtotal_items") or []):
                     if item.get("item_type") not in ("Product", "AddonProduct"):
                         continue
@@ -94,9 +96,14 @@ def update_shopline():
                     qty  = item.get("quantity", 0) or 0
                     rev  = (item.get("total") or {}).get("dollars", 0) or 0
                     if name not in items_map:
-                        items_map[name] = {"name": name, "qty": 0, "revenue": 0}
+                        items_map[name] = {"name": name, "qty": 0, "revenue": 0,
+                                           "gender": {"male":   {"qty": 0, "revenue": 0},
+                                                      "female": {"qty": 0, "revenue": 0},
+                                                      "other":  {"qty": 0, "revenue": 0}}}
                     items_map[name]["qty"]     += qty
                     items_map[name]["revenue"] += round(rev)
+                    items_map[name]["gender"][gender]["qty"]     += qty
+                    items_map[name]["gender"][gender]["revenue"] += round(rev)
                 for promo in (o.get("promotion_items") or []):
                     code = promo.get("coupon_code") or ""
                     if not code:
@@ -379,5 +386,8 @@ if __name__ == "__main__":
     print("=== Updating GA4 ===")
     update_ga4()
     print("=== Updating Meta ===")
-    update_meta()
+    try:
+        update_meta()
+    except Exception as e:
+        print(f"[Meta] SKIPPED — {e}")
     print("=== Done ===")

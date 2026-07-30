@@ -2185,28 +2185,69 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
       const itemMap = {};
       Object.entries(slItemsCache).filter(([d]) => d >= since && d <= until).forEach(([, rows]) => {
         rows.forEach(r => {
-          if (!itemMap[r.name]) itemMap[r.name] = {name: r.name, qty: 0, revenue: 0};
+          if (!itemMap[r.name]) itemMap[r.name] = {name: r.name, qty: 0, revenue: 0,
+            gender: {male:{qty:0,revenue:0}, female:{qty:0,revenue:0}, other:{qty:0,revenue:0}}};
           itemMap[r.name].qty     += r.qty;
           itemMap[r.name].revenue += r.revenue;
+          if (r.gender) ['male','female','other'].forEach(g => {
+            itemMap[r.name].gender[g].qty     += (r.gender[g]||{}).qty||0;
+            itemMap[r.name].gender[g].revenue += (r.gender[g]||{}).revenue||0;
+          });
         });
       });
-      const topItems = Object.values(itemMap).sort((a,b) => b.qty - a.qty).slice(0, 15);
+      // GA4 cross-ref for CVR + ATC rate
+      const ga4imap = {};
+      if (ga4Items) {
+        const sinceD2 = since.replace(/-/g,''), untilD2 = until.replace(/-/g,'');
+        ga4Items.filter(r => r.date >= sinceD2 && r.date <= untilD2).forEach(r => {
+          const k = r.itemName||''; if (!k) return;
+          if (!ga4imap[k]) ga4imap[k] = {views:0, atc:0, purchased:0};
+          ga4imap[k].views     += parseFloat(r.itemsViewed||0);
+          ga4imap[k].atc       += parseFloat(r.itemsAddedToCart||0);
+          ga4imap[k].purchased += parseFloat(r.itemsPurchased||0);
+        });
+      }
+      const topItems = Object.values(itemMap).sort((a,b) => b.qty - a.qty).slice(0, 15).map(r => {
+        const g4 = ga4imap[r.name]||{}; const v = g4.views||0;
+        return {...r, cvr: v>0?g4.purchased/v*100:null, atcRate: v>0?g4.atc/v*100:null};
+      });
       if (!topItems.length) return '';
       const maxQty = topItems[0].qty;
+      const G_LABEL = {male:'男性', female:'女性', other:'其他'};
+      const G_COLOR = {male:'#6366f1', female:'#f472b6', other:'#94a3b8'};
       return `<div class="table-card" style="margin-top:14px">
-        <div class="table-header"><h3>🏆 熱門品項</h3><span style="font-size:11px;color:#aaa">依銷售量排序</span></div>
-        ${collapseTable(topItems, (r,i) => `<tr>
-          <td style="color:#aaa;width:28px;text-align:center">${i+1}</td>
+        <div class="table-header"><h3>🏆 熱門品項</h3><span style="font-size:11px;color:#aaa">依銷售量排序 · 點擊列展開性別</span></div>
+        ${collapseTable(topItems, (r,i) => `<tr style="cursor:pointer" onclick="var s=this.nextElementSibling;if(s&&s.classList.contains('gi-sub'))s.style.display=s.style.display==='none'?'table-row':'none'">
+          <td style="color:#aaa;width:24px;text-align:center;font-size:12px">${i+1}</td>
           <td>${r.name}</td>
-          <td style="min-width:120px">
-            <div style="background:#f0f0f0;border-radius:4px;height:8px;overflow:hidden">
+          <td style="min-width:90px">
+            <div style="background:#f0f0f0;border-radius:4px;height:7px;overflow:hidden">
               <div style="background:#6366f1;height:100%;width:${(r.qty/maxQty*100).toFixed(0)}%;border-radius:4px"></div>
             </div>
           </td>
           <td style="text-align:right;font-weight:600">${r.qty.toLocaleString()} 件</td>
           <td style="text-align:right;color:#10b981">${fmtM(r.revenue)}</td>
+          <td style="text-align:right">${r.atcRate!=null?r.atcRate.toFixed(1)+'%':'—'}</td>
+          <td style="text-align:right;${r.cvr!=null&&r.cvr<2?'color:#f5222d':''}">${r.cvr!=null?r.cvr.toFixed(2)+'%':'—'}</td>
+          <td style="width:18px;color:#ccc;text-align:center;font-size:10px">▾</td>
+        </tr><tr class="gi-sub" style="display:none;background:#f8f9ff">
+          <td colspan="8" style="padding:10px 16px 10px 52px">
+            <div style="display:flex;gap:28px;flex-wrap:wrap">
+              ${['male','female','other'].map(g => {
+                const gd = r.gender[g]||{qty:0,revenue:0};
+                const pct = r.qty>0?(gd.qty/r.qty*100).toFixed(0):0;
+                return `<div style="display:flex;align-items:center;gap:6px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:${G_COLOR[g]};display:inline-block;flex-shrink:0"></span>
+                  <span style="color:#666;font-size:12px">${G_LABEL[g]}</span>
+                  <span style="font-weight:600;font-size:12px">${gd.qty.toLocaleString()} 件</span>
+                  <span style="color:#aaa;font-size:11px">(${pct}%)</span>
+                  <span style="color:#10b981;font-size:12px">${fmtM(gd.revenue)}</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </td>
         </tr>`,
-        `<tr><th style="width:28px">#</th><th>商品名稱</th><th>銷量佔比</th><th style="text-align:right">銷售量</th><th style="text-align:right">營收</th></tr>`,
+        `<tr><th style="width:24px">#</th><th>商品名稱</th><th>銷量佔比</th><th style="text-align:right">銷售量</th><th style="text-align:right">營收</th><th style="text-align:right">加購率</th><th style="text-align:right">轉換率</th><th></th></tr>`,
         'sl-top-items')}
       </div>`;
     })()}
