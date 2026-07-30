@@ -356,9 +356,8 @@ async function fetchData(forceRefresh = false) {
       return { ...r._keys, spend:r.spend, imp:r.imp, clk:r.clk, ctr, purchase:r.purchase, revenue:r.revenue, cpa, roas };
     });
     renderGoogleKeyword(kwRows);
-    const updatedAt = campJson.updated || new Date().toLocaleString('zh-TW');
-    const isCached  = campJson.cached;
-    document.getElementById('lastUpdate').textContent = updatedAt + (isCached ? '（快取）' : '');
+    const updatedAt = metaCache.updated || new Date().toLocaleString('zh-TW');
+    document.getElementById('lastUpdate').textContent = updatedAt;
     status.textContent = `✓ 完成・${campData.length} campaigns・${allAdData.length} 素材`;
     status.className = 'status-text ok';
   } catch(e) {
