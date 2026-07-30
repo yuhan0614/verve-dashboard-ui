@@ -212,7 +212,6 @@
 </div>
 
 <script>
-const API_BASE = 'https://verve-dashboard.onrender.com';
 const ACCOUNT_ID = '1417409513448597';
 let trendChart, pieChart;
 let overallSpendChart = null, overallPieChart = null;
@@ -290,15 +289,29 @@ async function fetchData(forceRefresh = false) {
 
   const prev = calcPrevDates(since, until);
 
+  // helper: aggregate meta rows by date range + grouping keys
+  function metaAgg(rows, since, until, groupKeys) {
+    const map = {};
+    rows.filter(r => r.date_start >= since && r.date_start <= until).forEach(r => {
+      const k = groupKeys.map(f => r[f]).join('|');
+      if (!map[k]) { map[k] = {...r, spend:0, impressions:0, clicks:0, link_clicks:0, purchase:0, purchase_value:0, add_to_cart:0, reach:0}; }
+      const g = map[k];
+      g.spend += r.spend; g.impressions += r.impressions; g.clicks += r.clicks;
+      g.link_clicks += r.link_clicks; g.purchase += r.purchase;
+      g.purchase_value += r.purchase_value; g.add_to_cart += r.add_to_cart; g.reach += r.reach;
+    });
+    return Object.values(map).map(r => {
+      r.roas  = r.spend > 0 ? r.purchase_value / r.spend : 0;
+      r.cpa   = r.purchase > 0 ? r.spend / r.purchase : 0;
+      r.ctr   = r.impressions > 0 ? r.clicks / r.impressions * 100 : 0;
+      r.cplc  = r.link_clicks > 0 ? r.spend / r.link_clicks : 0;
+      return r;
+    });
+  }
+
   try {
-    const [campRes, trendRes, adRes, urlRes, ageRes, genderRes,
-           gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res, prevTrendRes] = await Promise.all([
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign${forceRefresh?'&force=true':''}`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=account&time_increment=1${forceRefresh?'&force=true':''}`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=ad${forceRefresh?'&force=true':''}`),
-      fetch(`${API_BASE}/api/ad_urls?account=${ACCOUNT_ID}`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign&breakdowns=age`),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${since}&until=${until}&level=campaign&breakdowns=gender`),
+    const [metaRes, gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res] = await Promise.all([
+      fetch('./meta_cache.json'),
       fetch(GADS_CSV.daily),
       fetch(GADS_CSV.campaign),
       fetch(GADS_CSV.age),
@@ -308,17 +321,16 @@ async function fetchData(forceRefresh = false) {
       fetch(GADS_CSV.keyword),
       fetch(SHOLINE_JSON),
       fetch('./ga4_cache.json'),
-      fetch(`${API_BASE}/api/insights?accounts=${ACCOUNT_ID}&since=${prev.since}&until=${prev.until}&level=account&time_increment=1`),
     ]);
-    const campJson  = await campRes.json();
-    const trendJson = await trendRes.json();
-    const adJson    = await adRes.json();
-    const ageJson   = await ageRes.json();
-    const genderJson= await genderRes.json();
-    const campData  = campJson.data || [];
-    const trendData = trendJson.data || [];
-    allAdData       = adJson.data || [];
-    adUrlMap        = (await urlRes.json()).data || {};
+    const metaCache = await metaRes.json();
+
+    const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
+    const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
+    const campData      = metaAgg(metaCache.campaigns || [], since, until, ['campaign_id','campaign_name']);
+    const ageData       = metaAgg(metaCache.age       || [], since, until, ['campaign_id','campaign_name','age']);
+    const genderData    = metaAgg(metaCache.gender    || [], since, until, ['campaign_id','campaign_name','gender']);
+    allAdData           = metaCache.ads || [];
+    adUrlMap            = metaCache.ad_urls || {};
 
     const gDaily  = parseCSV(await gDailyRes.text());
     const gCamp   = parseCSV(await gCampRes.text());
@@ -329,14 +341,13 @@ async function fetchData(forceRefresh = false) {
     const gKw     = parseCSV(await gKwRes.text());
     const sholineJson  = await sholineRes.json();
     const ga4Cache     = await ga4Res.json();
-    const prevTrendData = (await prevTrendRes.json()).data || [];
 
     renderOverall(trendData, gDaily, since, until, ageJson.data||[], genderJson.data||[], gAge, gGender, prevTrendData, prev, ga4Cache);
     renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
     renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData);
     renderPerf(campData, trendData, since, until, prevTrendData);
     renderCreative();
-    renderDemographic(ageJson.data || [], genderJson.data || []);
+    renderDemographic(ageData, genderData);
     renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until, prev);
     const kwRows = aggRows(filterByDate(gKw, since, until), ['關鍵字']).map(r => {
       const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;

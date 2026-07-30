@@ -1,6 +1,6 @@
 """
 Daily incremental cache update for GitHub Pages.
-Fetches last DAYS_BACK days from SHOPLINE API and GA4, merges into existing JSON files.
+Fetches last DAYS_BACK days from SHOPLINE API, GA4, and Meta, merges into existing JSON files.
 """
 import json, os, requests
 from datetime import datetime, timedelta, timezone
@@ -175,6 +175,153 @@ def update_ga4():
     with open("ga4_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
 
+# ── META ─────────────────────────────────────────────────────────────────────
+
+META_TOKEN   = os.environ["META_ACCESS_TOKEN"]
+META_ACCOUNT = "1417409513448597"
+META_BASE    = "https://graph.facebook.com/v20.0"
+META_FIELDS  = "spend,impressions,clicks,inline_link_clicks,actions,action_values,cpc,cost_per_inline_link_click,ctr,purchase_roas,cost_per_action_type,date_start,date_stop,campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,reach,frequency"
+
+def _av(lst, t):
+    for x in (lst or []):
+        if x.get("action_type") == t:
+            return float(x.get("value", 0))
+    return 0.0
+
+def _parse_meta(row, level):
+    spend   = float(row.get("spend", 0) or 0)
+    actions = row.get("actions", [])
+    avals   = row.get("action_values", [])
+    roas_l  = row.get("purchase_roas", [])
+    cpa_l   = row.get("cost_per_action_type", [])
+    purchase = _av(actions, "purchase")
+    cpa = _av(cpa_l, "purchase") or (spend / purchase if purchase else 0)
+    r = {
+        "date_start": row.get("date_start", ""),
+        "spend": spend,
+        "impressions": int(row.get("impressions", 0) or 0),
+        "clicks": int(row.get("clicks", 0) or 0),
+        "link_clicks": int(row.get("inline_link_clicks", 0) or 0),
+        "purchase": purchase,
+        "purchase_value": _av(avals, "purchase"),
+        "add_to_cart": _av(actions, "add_to_cart"),
+        "cpc": float(row.get("cpc", 0) or 0),
+        "cplc": float(row.get("cost_per_inline_link_click", 0) or 0),
+        "ctr": float(row.get("ctr", 0) or 0),
+        "cpa": cpa,
+        "roas": float(roas_l[0]["value"]) if roas_l else 0.0,
+        "reach": int(row.get("reach", 0) or 0),
+        "frequency": float(row.get("frequency", 0) or 0),
+    }
+    if "age"    in row: r["age"]    = row["age"]
+    if "gender" in row: r["gender"] = row["gender"]
+    if level in ("campaign", "adset", "ad"):
+        r["campaign_id"]   = row.get("campaign_id", "")
+        r["campaign_name"] = row.get("campaign_name", "")
+    if level in ("adset", "ad"):
+        r["adset_id"]   = row.get("adset_id", "")
+        r["adset_name"] = row.get("adset_name", "")
+    if level == "ad":
+        r["ad_id"]   = row.get("ad_id", "")
+        r["ad_name"] = row.get("ad_name", "")
+    return r
+
+def meta_fetch(since, until, level, time_increment=1, breakdowns=None):
+    url = f"{META_BASE}/act_{META_ACCOUNT}/insights"
+    params = {
+        "access_token": META_TOKEN,
+        "fields": META_FIELDS,
+        "level": level,
+        "time_range": f'{{"since":"{since}","until":"{until}"}}',
+        "time_increment": time_increment,
+        "limit": 500,
+    }
+    if breakdowns:
+        params["breakdowns"] = breakdowns
+    rows = []
+    while url:
+        r = requests.get(url, params=params, timeout=120)
+        data = r.json()
+        if "error" in data:
+            raise Exception(data["error"]["message"])
+        for row in data.get("data", []):
+            rows.append(_parse_meta(row, level))
+        url = data.get("paging", {}).get("next")
+        params = {}
+    return rows
+
+def meta_fetch_ad_urls():
+    result = {}
+    url = f"{META_BASE}/act_{META_ACCOUNT}/ads"
+    params = {
+        "access_token": META_TOKEN,
+        "fields": "name,creative{object_story_spec,thumbnail_url,image_url}",
+        "limit": 500,
+    }
+    while url:
+        r = requests.get(url, params=params, timeout=120)
+        data = r.json()
+        if "error" in data:
+            raise Exception(data["error"]["message"])
+        for ad in data.get("data", []):
+            name = ad.get("name", "")
+            creative = ad.get("creative") or {}
+            spec = creative.get("object_story_spec") or {}
+            dest = None
+            if "link_data" in spec:
+                dest = spec["link_data"].get("link")
+            elif "video_data" in spec:
+                dest = (spec["video_data"].get("call_to_action") or {}).get("value", {}).get("link")
+            thumb = creative.get("thumbnail_url") or creative.get("image_url")
+            if name not in result:
+                result[name] = {"url": dest if dest and "{{" not in (dest or "") else None, "thumb": thumb}
+        url = data.get("paging", {}).get("next")
+        params = {}
+    return result
+
+def update_meta():
+    try:
+        with open("meta_cache.json") as f:
+            cache = json.load(f)
+    except FileNotFoundError:
+        cache = {"daily": [], "campaigns": [], "ads": [], "age": [], "gender": [], "ad_urls": {}}
+
+    start = (TODAY - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
+    end   = (TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    def merge(existing, new_rows, key_fn):
+        m = {key_fn(r): r for r in existing}
+        for r in new_rows:
+            m[key_fn(r)] = r
+        return sorted(m.values(), key=key_fn)
+
+    new_daily = meta_fetch(start, end, "account")
+    cache["daily"] = merge(cache["daily"], new_daily, lambda r: r["date_start"])
+    print(f"[Meta] daily: {len(new_daily)} rows")
+
+    new_camp = meta_fetch(start, end, "campaign")
+    cache["campaigns"] = merge(cache["campaigns"], new_camp, lambda r: (r["date_start"], r["campaign_id"]))
+    print(f"[Meta] campaigns: {len(new_camp)} rows")
+
+    new_ads = meta_fetch(start, end, "ad")
+    cache["ads"] = merge(cache["ads"], new_ads, lambda r: (r["date_start"], r["ad_id"]))
+    print(f"[Meta] ads: {len(new_ads)} rows")
+
+    new_age = meta_fetch(start, end, "campaign", breakdowns="age")
+    cache["age"] = merge(cache["age"], new_age, lambda r: (r["date_start"], r["campaign_id"], r.get("age","")))
+    print(f"[Meta] age: {len(new_age)} rows")
+
+    new_gen = meta_fetch(start, end, "campaign", breakdowns="gender")
+    cache["gender"] = merge(cache["gender"], new_gen, lambda r: (r["date_start"], r["campaign_id"], r.get("gender","")))
+    print(f"[Meta] gender: {len(new_gen)} rows")
+
+    cache["ad_urls"] = meta_fetch_ad_urls()
+    print(f"[Meta] ad_urls: {len(cache['ad_urls'])} ads")
+
+    cache["updated"] = end
+    with open("meta_cache.json", "w") as f:
+        json.dump(cache, f, ensure_ascii=False)
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -182,4 +329,6 @@ if __name__ == "__main__":
     update_shopline()
     print("=== Updating GA4 ===")
     update_ga4()
+    print("=== Updating Meta ===")
+    update_meta()
     print("=== Done ===")
