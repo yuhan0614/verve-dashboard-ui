@@ -174,6 +174,13 @@ def update_ga4():
     cache["updated"] = end_date
     with open("ga4_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
+    # write split files for fast frontend loading
+    for key in ["daily","daily_channels","daily_source_medium","daily_items","daily_search"]:
+        fname = "ga4_" + key.replace("daily_","").replace("daily","daily") + ".json"
+        with open(fname, "w") as f:
+            json.dump(cache.get(key, []), f, ensure_ascii=False)
+    with open("ga4_meta.json","w") as f:
+        json.dump({"updated": cache["updated"]}, f)
 
 # ── META ─────────────────────────────────────────────────────────────────────
 

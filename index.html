@@ -219,6 +219,13 @@ let allAdData = [];
 let adUrlMap = {};
 let sortKey = '', sortDir = -1;
 
+// in-memory cache — persists across date changes without re-fetching
+let _cache = {};
+async function cachedFetch(url) {
+  if (!_cache[url]) _cache[url] = fetch(url).then(r => r.text());
+  return _cache[url];
+}
+
 const SHOLINE_JSON = './sl_cache.json';
 const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
 const GADS_CSV = {
@@ -279,6 +286,7 @@ function switchTab(name) {
 
 // ── Fetch ─────────────────────────────────────────────────
 async function fetchData(forceRefresh = false) {
+  if (forceRefresh) _cache = {};
   const since = document.getElementById('dateFrom').value;
   const until = document.getElementById('dateTo').value;
   const btn = document.getElementById('fetchBtn');
@@ -310,20 +318,22 @@ async function fetchData(forceRefresh = false) {
   }
 
   try {
-    const [metaRes, gDailyRes, gCampRes, gAgeRes, gGenderRes, gLocRes, gAgRes, gKwRes, sholineRes, ga4Res] = await Promise.all([
-      fetch('./meta_cache.json'),
-      fetch(GADS_CSV.daily),
-      fetch(GADS_CSV.campaign),
-      fetch(GADS_CSV.age),
-      fetch(GADS_CSV.gender),
-      fetch(GADS_CSV.location),
-      fetch(GADS_CSV.adgroup),
-      fetch(GADS_CSV.keyword),
-      fetch(SHOLINE_JSON),
-      fetch('./ga4_cache.json'),
+    const [metaTxt, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
+           ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
+      cachedFetch('./meta_cache.json'),
+      cachedFetch(GADS_CSV.daily),
+      cachedFetch(GADS_CSV.campaign),
+      cachedFetch(GADS_CSV.age),
+      cachedFetch(GADS_CSV.gender),
+      cachedFetch(GADS_CSV.location),
+      cachedFetch(GADS_CSV.adgroup),
+      cachedFetch(GADS_CSV.keyword),
+      cachedFetch(SHOLINE_JSON),
+      cachedFetch('./ga4_daily.json'),
+      cachedFetch('./ga4_channels.json'),
+      cachedFetch('./ga4_source_medium.json'),
     ]);
-    const metaCache = await metaRes.json();
-
+    const metaCache = JSON.parse(metaTxt);
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
     const campData      = metaAgg(metaCache.campaigns || [], since, until, ['campaign_id','campaign_name']);
@@ -332,15 +342,30 @@ async function fetchData(forceRefresh = false) {
     allAdData           = metaCache.ads || [];
     adUrlMap            = metaCache.ad_urls || {};
 
-    const gDaily  = parseCSV(await gDailyRes.text());
-    const gCamp   = parseCSV(await gCampRes.text());
-    const gAge    = parseCSV(await gAgeRes.text());
-    const gGender = parseCSV(await gGenderRes.text());
-    const gLoc    = parseCSV(await gLocRes.text());
-    const gAg     = parseCSV(await gAgRes.text());
-    const gKw     = parseCSV(await gKwRes.text());
-    const sholineJson  = await sholineRes.json();
-    const ga4Cache     = await ga4Res.json();
+    const gDaily  = parseCSV(gDailyTxt);
+    const gCamp   = parseCSV(gCampTxt);
+    const gAge    = parseCSV(gAgeTxt);
+    const gGender = parseCSV(gGenderTxt);
+    const gLoc    = parseCSV(gLocTxt);
+    const gAg     = parseCSV(gAgTxt);
+    const gKw     = parseCSV(gKwTxt);
+    const sholineJson = JSON.parse(sholineTxt);
+    const ga4Cache = {
+      daily:               JSON.parse(ga4DailyTxt),
+      daily_channels:      JSON.parse(ga4ChTxt),
+      daily_source_medium: JSON.parse(ga4SmTxt),
+      daily_items:         [],
+      daily_search:        [],
+    };
+    // lazy load items + search in background
+    Promise.all([
+      cachedFetch('./ga4_items.json'),
+      cachedFetch('./ga4_search.json'),
+    ]).then(([itemsTxt, searchTxt]) => {
+      ga4Cache.daily_items  = JSON.parse(itemsTxt);
+      ga4Cache.daily_search = JSON.parse(searchTxt);
+      renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
+    });
 
     renderOverall(trendData, gDaily, since, until, ageData, genderData, gAge, gGender, prevTrendData, prev, ga4Cache);
     renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
