@@ -62,13 +62,18 @@ def sl_agg(orders):
 
 def fetch_product_gender_map():
     result = {}
-    url = f"{SL_BASE}/products"
-    params = {"per_page": 250, "fields": "title_translations,tags"}
-    while url:
-        resp = requests.get(url, headers=SL_HEADS, params=params, timeout=120)
+    previous_id = None
+    while True:
+        params = {"per_page": 250}
+        if previous_id:
+            params["previous_id"] = previous_id
+        resp = requests.get(f"{SL_BASE}/products", headers=SL_HEADS, params=params, timeout=120)
         resp.raise_for_status()
         data = resp.json()
-        for p in (data.get("items") or []):
+        items = data.get("items") or []
+        if not items:
+            break
+        for p in items:
             name = (p.get("title_translations") or {}).get("zh-hant") or ""
             if not name:
                 continue
@@ -81,11 +86,9 @@ def fetch_product_gender_map():
                 result[name] = "female"
             else:
                 result[name] = "other"
-        last_id = data.get("last_id")
-        if not last_id or not data.get("items"):
+        if len(items) < 250:
             break
-        url = f"{SL_BASE}/products"
-        params = {"per_page": 250, "fields": "title_translations,tags", "previous_id": last_id}
+        previous_id = items[-1]["id"]
     print(f"[SL] product gender map: {len(result)} products")
     return result
 
