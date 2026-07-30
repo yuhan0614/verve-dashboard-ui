@@ -406,8 +406,11 @@ def update_meta():
     cache["gender"] = merge(cache["gender"], new_gen, lambda r: (r["date_start"], r["campaign_id"], r.get("gender","")))
     print(f"[Meta] gender: {len(new_gen)} rows")
 
-    cache["ad_urls"] = meta_fetch_ad_urls()
-    print(f"[Meta] ad_urls: {len(cache['ad_urls'])} ads")
+    try:
+        cache["ad_urls"] = meta_fetch_ad_urls()
+        print(f"[Meta] ad_urls: {len(cache['ad_urls'])} ads")
+    except Exception as e:
+        print(f"[Meta] ad_urls SKIPPED — {e}")
 
     cache["updated"] = end
     with open("meta_cache.json", "w") as f:
