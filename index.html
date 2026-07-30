@@ -404,6 +404,17 @@ const PIE_COLORS = ['#4f8ef7','#f7954f','#52c41a','#f74f7e','#a855f7','#14b8a6',
 // ── Formatters ────────────────────────────────────────────
 function fmtN(n, d=0) { if (n == null || isNaN(n)) return '<span class="na">—</span>'; return (+n).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtM(n) { if (!n && n !== 0) return '<span class="na">—</span>'; return 'NT$'+Math.round(n).toLocaleString('zh-TW'); }
+
+function switchTopItems(mode) {
+  if (!window._renderTopItems) return;
+  document.getElementById('topItemsBody').innerHTML = window._renderTopItems(mode);
+  ['all','male','female'].forEach(m => {
+    const btn = document.getElementById('tiTab_'+m);
+    if (!btn) return;
+    btn.style.background = m===mode ? '#6366f1' : '#f0f0f0';
+    btn.style.color      = m===mode ? '#fff'    : '#666';
+  });
+}
 function fmtP(n) { if (n == null) return '<span class="na">—</span>'; return (+n).toFixed(2)+'%'; }
 function rc(r) { return r >= 10 ? 'roas-high' : r >= 3 ? 'roas-mid' : 'roas-low'; }
 
@@ -2195,7 +2206,6 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
           });
         });
       });
-      // GA4 cross-ref for CVR + ATC rate
       const ga4imap = {};
       if (ga4Items) {
         const sinceD2 = since.replace(/-/g,''), untilD2 = until.replace(/-/g,'');
@@ -2207,48 +2217,50 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
           ga4imap[k].purchased += parseFloat(r.itemsPurchased||0);
         });
       }
-      const topItems = Object.values(itemMap).sort((a,b) => b.qty - a.qty).slice(0, 15).map(r => {
+      const allItemsBase = Object.values(itemMap).map(r => {
         const g4 = ga4imap[r.name]||{}; const v = g4.views||0;
         return {...r, cvr: v>0?g4.purchased/v*100:null, atcRate: v>0?g4.atc/v*100:null};
       });
-      if (!topItems.length) return '';
-      const maxQty = topItems[0].qty;
-      const G_LABEL = {male:'男性', female:'女性', other:'其他'};
-      const G_COLOR = {male:'#6366f1', female:'#f472b6', other:'#94a3b8'};
-      return `<div class="table-card" style="margin-top:14px">
-        <div class="table-header"><h3>🏆 熱門品項</h3><span style="font-size:11px;color:#aaa">依銷售量排序 · 點擊列展開性別</span></div>
-        ${collapseTable(topItems, (r,i) => `<tr style="cursor:pointer" onclick="var s=this.nextElementSibling;if(s&&s.classList.contains('gi-sub'))s.style.display=s.style.display==='none'?'table-row':'none'">
+      if (!allItemsBase.length) return '';
+
+      function renderTopItemsTable(mode) {
+        const rows = allItemsBase.map(r => {
+          const qty     = mode==='all' ? r.qty     : (r.gender[mode]||{}).qty||0;
+          const revenue = mode==='all' ? r.revenue : (r.gender[mode]||{}).revenue||0;
+          return {...r, _qty: qty, _rev: revenue};
+        }).filter(r => r._qty > 0).sort((a,b) => b._qty - a._qty).slice(0, 15);
+        if (!rows.length) return '<div style="padding:16px;color:#aaa;font-size:13px">此性別無銷售資料</div>';
+        const maxQ = rows[0]._qty;
+        return collapseTable(rows, (r,i) => `<tr>
           <td style="color:#aaa;width:24px;text-align:center;font-size:12px">${i+1}</td>
-          <td>${r.name}</td>
+          <td style="text-align:left">${r.name}</td>
           <td style="min-width:90px">
             <div style="background:#f0f0f0;border-radius:4px;height:7px;overflow:hidden">
-              <div style="background:#6366f1;height:100%;width:${(r.qty/maxQty*100).toFixed(0)}%;border-radius:4px"></div>
+              <div style="background:#6366f1;height:100%;width:${(r._qty/maxQ*100).toFixed(0)}%;border-radius:4px"></div>
             </div>
           </td>
-          <td style="text-align:right;font-weight:600">${r.qty.toLocaleString()} 件</td>
-          <td style="text-align:right;color:#10b981">${fmtM(r.revenue)}</td>
+          <td style="text-align:right;font-weight:600">${r._qty.toLocaleString()} 件</td>
+          <td style="text-align:right;color:#10b981">${fmtM(r._rev)}</td>
           <td style="text-align:right">${r.atcRate!=null?r.atcRate.toFixed(1)+'%':'—'}</td>
           <td style="text-align:right;${r.cvr!=null&&r.cvr<2?'color:#f5222d':''}">${r.cvr!=null?r.cvr.toFixed(2)+'%':'—'}</td>
-          <td style="width:18px;color:#ccc;text-align:center;font-size:10px">▾</td>
-        </tr><tr class="gi-sub" style="display:none;background:#f8f9ff">
-          <td colspan="8" style="padding:10px 16px 10px 52px">
-            <div style="display:flex;gap:28px;flex-wrap:wrap">
-              ${['male','female','other'].map(g => {
-                const gd = r.gender[g]||{qty:0,revenue:0};
-                const pct = r.qty>0?(gd.qty/r.qty*100).toFixed(0):0;
-                return `<div style="display:flex;align-items:center;gap:6px">
-                  <span style="width:8px;height:8px;border-radius:50%;background:${G_COLOR[g]};display:inline-block;flex-shrink:0"></span>
-                  <span style="color:#666;font-size:12px">${G_LABEL[g]}</span>
-                  <span style="font-weight:600;font-size:12px">${gd.qty.toLocaleString()} 件</span>
-                  <span style="color:#aaa;font-size:11px">(${pct}%)</span>
-                  <span style="color:#10b981;font-size:12px">${fmtM(gd.revenue)}</span>
-                </div>`;
-              }).join('')}
-            </div>
-          </td>
         </tr>`,
-        `<tr><th style="width:24px">#</th><th>商品名稱</th><th>銷量佔比</th><th style="text-align:right">銷售量</th><th style="text-align:right">營收</th><th style="text-align:right">加購率</th><th style="text-align:right">轉換率</th><th></th></tr>`,
-        'sl-top-items')}
+        `<tr><th style="width:24px">#</th><th style="text-align:left">商品名稱</th><th>銷量佔比</th><th style="text-align:right">銷售量</th><th style="text-align:right">營收</th><th style="text-align:right">加購率</th><th style="text-align:right">轉換率</th></tr>`,
+        'sl-top-items');
+      }
+      window._renderTopItems = renderTopItemsTable;
+
+      const tabBtnStyle = (active) => `padding:4px 12px;border-radius:20px;border:none;cursor:pointer;font-size:12px;font-weight:600;` +
+        (active ? 'background:#6366f1;color:#fff' : 'background:#f0f0f0;color:#666');
+      return `<div class="table-card" style="margin-top:14px">
+        <div class="table-header" style="display:flex;align-items:center;justify-content:space-between">
+          <h3 style="margin:0">🏆 熱門品項</h3>
+          <div style="display:flex;gap:6px" id="topItemsTabs">
+            <button id="tiTab_all"    style="${tabBtnStyle(true)}"  onclick="switchTopItems('all')">All</button>
+            <button id="tiTab_male"   style="${tabBtnStyle(false)}" onclick="switchTopItems('male')">男生</button>
+            <button id="tiTab_female" style="${tabBtnStyle(false)}" onclick="switchTopItems('female')">女生</button>
+          </div>
+        </div>
+        <div id="topItemsBody">${renderTopItemsTable('all')}</div>
       </div>`;
     })()}
     ${(() => {
