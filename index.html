@@ -320,9 +320,9 @@ async function fetchData(forceRefresh = false) {
 
   try {
     const metaKey = `${META_API}?since=${since}&until=${until}`;
-    const [metaTxt, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
+    const [metaResult, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
-      cachedFetch(metaKey),
+      cachedFetch(metaKey).catch(() => '{}'),
       cachedFetch(GADS_CSV.daily),
       cachedFetch(GADS_CSV.campaign),
       cachedFetch(GADS_CSV.age),
@@ -335,7 +335,7 @@ async function fetchData(forceRefresh = false) {
       cachedFetch('./ga4_channels.json'),
       cachedFetch('./ga4_source_medium.json'),
     ]);
-    const metaCache = JSON.parse(metaTxt);
+    const metaCache = (() => { try { return JSON.parse(metaResult); } catch { return {}; } })();
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
     const campData      = metaAgg(metaCache.campaigns || [], since, until, ['campaign_id','campaign_name']);
