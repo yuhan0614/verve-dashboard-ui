@@ -227,7 +227,6 @@ async function cachedFetch(url) {
 }
 
 const SHOLINE_JSON = './sl_cache.json';
-const META_API = 'https://verve-api.vercel.app/api/meta';
 const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
 const GADS_CSV = {
   daily:    `${GADS_PUB}?gid=1644261807&single=true&output=csv`,
@@ -319,10 +318,9 @@ async function fetchData(forceRefresh = false) {
   }
 
   try {
-    const metaKey = `${META_API}?since=${since}&until=${until}`;
     const [metaResult, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
-      cachedFetch(metaKey).catch(() => '{}'),
+      cachedFetch('./meta_cache.json').catch(() => '{}'),
       cachedFetch(GADS_CSV.daily),
       cachedFetch(GADS_CSV.campaign),
       cachedFetch(GADS_CSV.age),
