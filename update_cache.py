@@ -213,7 +213,7 @@ def update_ga4():
         cache = json.load(f)
 
     start_date = (TODAY - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
-    end_date   = (TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
+    end_date   = TODAY.strftime("%Y-%m-%d")
 
     client = ga4_client()
 
@@ -381,7 +381,7 @@ def update_meta():
         cache = {"daily": [], "campaigns": [], "ads": [], "age": [], "gender": [], "ad_urls": {}}
 
     start = (TODAY - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
-    end   = (TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
+    end   = TODAY.strftime("%Y-%m-%d")
 
     def merge(existing, new_rows, key_fn):
         m = {key_fn(r): r for r in existing}
