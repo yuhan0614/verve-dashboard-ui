@@ -567,7 +567,6 @@ function renderCreative() {
           <thead><tr>
             <th>素材名稱</th>
             <th style="text-align:center">縮圖</th>
-            <th>導連</th>
             <th class="sortable" onclick="sortAds('spend')">花費</th>
             <th class="sortable" onclick="sortAds('impressions')">曝光</th>
             <th class="sortable" onclick="sortAds('ctr')">CTR</th>
@@ -638,20 +637,15 @@ function renderAdTable(data) {
   document.getElementById('adTableBody').innerHTML = sorted.map(r => {
     const bw = Math.round((r.spend||0)/maxSpend*60);
     const info = adUrlMap[r.ad_name] || {};
-    const destUrl = info.url;
     const thumb = info.thumb;
     const thumbCell = thumb
       ? `<img src="${thumb}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;display:block;border:1px solid #eee;" onerror="this.style.display='none'">`
-      : '<span class="na">—</span>';
-    const urlCell = destUrl
-      ? `<a href="${destUrl}" target="_blank" title="${destUrl}" style="color:#1877f2;font-size:11px;text-decoration:none;display:block;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${destUrl.replace(/^https?:\/\//,'').split('/')[0]}<span style="color:#aaa">${destUrl.replace(/^https?:\/\/[^/]+/,'').slice(0,30)||'/'}</span></a>`
       : '<span class="na">—</span>';
     return `<tr>
       <td>
         <span class="cell-name" title="${r.ad_name}">${r.ad_name||'—'}</span>
       </td>
       <td style="text-align:center">${thumbCell}</td>
-      <td>${urlCell}</td>
       <td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>
       <td>${fmtN(r.impressions)}</td>
       <td>${fmtP(r.ctr)}</td>
