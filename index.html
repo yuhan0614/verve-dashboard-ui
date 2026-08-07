@@ -1836,6 +1836,14 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       </div>
       <div id="chGroupPctBar" style="display:flex;border-radius:6px;overflow:hidden;height:22px;margin-bottom:10px"></div>
       <div style="position:relative;height:260px"><canvas id="ga4ChGroupChart"></canvas></div>
+      <div style="margin-top:8px;font-size:11px;color:#aaa;line-height:1.8">
+        分類說明：
+        <b>廣告</b> = google/cpc、facebook/cpc、fb/paid、ig/paid
+        <b>Line推播</b> = omnichat、omnisegment
+        <b>社群</b> = facebook、instagram、igshopping
+        <b>自然搜尋</b> = organic
+        <b>Direct</b> = (direct)/(none)
+      </div>
     </div>
     <div class="table-card">
       <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
@@ -1944,9 +1952,9 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 
   function classifySourceMedium(srcMed) {
     const s = (srcMed||'').toLowerCase();
-    if (['google / cpc','facebook / cpc','facebook / paid'].includes(s)) return '廣告';
+    if (['google / cpc','facebook / cpc','facebook / paid','fb / paid','ig / paid'].includes(s)) return '廣告';
     if (s === '(direct) / (none)') return 'Direct';
-    if (s.includes('omnichat')) return 'Line推播';
+    if (s.includes('omnichat') || s.includes('omnisegment')) return 'Line推播';
     if (s.includes('organic')) return '自然搜尋';
     if (s.includes('facebook') || s.includes('instagram') || s.includes('igshopping') || s.includes('social')) return '社群';
     return '其他';
