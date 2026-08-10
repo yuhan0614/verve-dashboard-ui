@@ -425,7 +425,10 @@ if __name__ == "__main__":
     print("=== Updating SHOPLINE ===")
     update_shopline()
     print("=== Updating GA4 ===")
-    update_ga4()
+    try:
+        update_ga4()
+    except Exception as e:
+        print(f"[GA4] SKIPPED — {e}")
     print("=== Updating Meta ===")
     try:
         update_meta()
