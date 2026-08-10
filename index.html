@@ -321,8 +321,8 @@ async function fetchData(forceRefresh = false) {
   }
 
   try {
-    const metaUrl = `${META_API}?since=${since}&until=${until}`;
-    if (_cache[metaUrl]) delete _cache[metaUrl]; // 每次都抓最新
+    const metaUrl = META_API;  // 不帶日期，讓後端用30天cache，前端metaAgg再篩選
+    if (_cache[metaUrl]) delete _cache[metaUrl];
     const [metaResult, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => '{}'),
