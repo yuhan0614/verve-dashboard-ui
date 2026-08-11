@@ -35,7 +35,7 @@
   .status-text.err { color: #f5222d; }
 
   /* Tabs */
-  .tabs { background: white; border-bottom: 1px solid #e4e6ea; padding: 0 24px; display: flex; gap: 0; position: sticky; top: 56px; z-index: 40; }
+  .tabs { background: white; border-bottom: 1px solid #e4e6ea; padding: 0 24px; display: flex; gap: 0; }
   .tab-btn { padding: 13px 20px; font-size: 14px; font-weight: 500; color: #888; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; }
   .tab-btn:hover { color: #52c41a; }
   .tab-btn.active { color: #52c41a; border-bottom-color: #52c41a; font-weight: 600; }
@@ -157,8 +157,6 @@
     更新資料
   </button>
   <span class="status-text" id="statusText"></span>
-</div>
-
 </div>
 <div class="tabs">
   <button class="tab-btn" onclick="switchTab('sholine')">🛍️ SHOPLINE</button>
@@ -1298,18 +1296,20 @@ function renderGoogleAds(data, since, until, prev) {
   ];
 
   // 每日 rows for trend chart
-  const dailyRows = daily.map(r => ({
-    date: r['日期'],
-    spend: parseFloat(r['花費(TWD)'])||0,
-    imp: parseInt(r['曝光'])||0,
-    clk: parseInt(r['點擊'])||0,
-    ctr: parseFloat(r['CTR(%)'])||0,
-    cpc: parseFloat(r['CPC(TWD)'])||0,
-    purchase: parseFloat(r['購買'])||0,
-    revenue: parseFloat(r['營收(TWD)'])||0,
-    cpa: parseFloat(r['CPA(TWD)'])||0,
-    roas: parseFloat(r['ROAS'])||0,
-  })).sort((a,b) => a.date > b.date ? 1 : -1);
+  const dailyRows = daily.map(r => {
+    const spend   = parseFloat(r['花費(TWD)'])||0;
+    const revenue = parseFloat(r['營收(TWD)'])||0;
+    const clk     = parseInt(r['點擊'])||0;
+    const imp     = parseInt(r['曝光'])||0;
+    const purchase= parseFloat(r['購買'])||0;
+    return {
+      date: r['日期'], spend, imp, clk, purchase, revenue,
+      ctr:  imp > 0 ? clk/imp*100 : 0,
+      cpc:  clk > 0 ? spend/clk : 0,
+      cpa:  purchase > 0 ? spend/purchase : 0,
+      roas: spend > 0 ? revenue/spend : 0,
+    };
+  }).sort((a,b) => a.date > b.date ? 1 : -1);
 
   // 總計
   const total = dailyRows.reduce((a,r) => ({
@@ -1517,7 +1517,7 @@ function renderGoogleAds(data, since, until, prev) {
           <span style="font-size:13px;font-weight:600;color:#555">活動篩選</span>
           <select id="gadsDemoFilter" style="font-size:13px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;min-width:260px">
             <option value="">全部活動</option>
-            ${gadsDemoCamps.map(c=>`<option value="${encodeURIComponent(c)}">${c}</option>`).join('')}
+            ${[...new Set([...(data.age||[]),...(data.gender||[])].map(r=>r['廣告活動']).filter(Boolean))].sort().map(c=>`<option value="${encodeURIComponent(c)}">${c}</option>`).join('')}
           </select>
         </div>
       </div>
