@@ -1460,8 +1460,9 @@ function renderGoogleAds(data, since, until, prev) {
     const renderDemoCard = (rows, dimKey, title, pieId, barId, EXCL) => {
       if (!rows.length) return;
       const barRows = rows.filter(r=>!EXCL.includes(r[dimKey]));
+      const _gColor = v => (['女性','FEMALE'].includes(v)?'#f74f7e':['男性','MALE'].includes(v)?'#4285f4':'#aaa');
       const colors = dimKey==='性別'
-        ? rows.map(r=>r[dimKey]==='女性'?'#f74f7e':r[dimKey]==='男性'?'#4285f4':'#aaa')
+        ? rows.map(r=>_gColor(r[dimKey]))
         : PIE_COLORS.slice(0,rows.length);
       const totalSpend = rows.reduce((s,r)=>s+r.spend,0);
 
@@ -1495,7 +1496,7 @@ function renderGoogleAds(data, since, until, prev) {
       }).join('');
       const c2 = new Chart(document.getElementById(barId), {
         data:{labels:barRows.map(r=>r[dimKey]),datasets:[
-          {type:'bar',label:'花費',data:barRows.map(r=>r.spend),backgroundColor:dimKey==='性別'?colors.map(c=>c+'88'):'#a8c8f8',borderColor:dimKey==='性別'?colors:'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
+          {type:'bar',label:'花費',data:barRows.map(r=>r.spend),backgroundColor:dimKey==='性別'?barRows.map(r=>_gColor(r[dimKey])+'88'):'#a8c8f8',borderColor:dimKey==='性別'?barRows.map(r=>_gColor(r[dimKey])):'#7aaee8',borderWidth:1,yAxisID:'y',borderRadius:4,order:2},
           {type:'line',label:'ROAS',data:barRows.map(r=>r.roas),borderColor:'#e8833a',backgroundColor:'transparent',borderWidth:2.5,pointRadius:4,tension:0.3,yAxisID:'y2',order:1}
         ]},
         options:{responsive:true,maintainAspectRatio:false,
@@ -1513,6 +1514,7 @@ function renderGoogleAds(data, since, until, prev) {
   if (data.age.length || data.gender.length) {
     el.insertAdjacentHTML('beforeend', `
       <div class="table-card" style="margin-top:20px;padding:12px 16px">
+        <div style="font-size:12px;color:#999;margin-bottom:10px">⚠️ Performance Max 廣告活動不支援年齡／性別維度，以下數字不含 PMax，故加總會低於整體花費。</div>
         <div style="display:flex;align-items:center;gap:12px">
           <span style="font-size:13px;font-weight:600;color:#555">活動篩選</span>
           <select id="gadsDemoFilter" style="font-size:13px;padding:5px 10px;border:1px solid #ddd;border-radius:6px;min-width:260px">
