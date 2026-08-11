@@ -333,7 +333,7 @@ async function fetchData(forceRefresh = false) {
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => '{}'),
-      fetch(GADS_API).then(r=>r.json()).catch(() => ({data:[]})),
+      fetch(`${GADS_API}?since=${since}&until=${until}`).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON),
       cachedFetch('./ga4_daily.json'),
       cachedFetch('./ga4_channels.json'),
