@@ -230,16 +230,22 @@ async function cachedFetch(url) {
 
 const SHOLINE_JSON = './sl_cache.json';
 const META_API = 'https://verve-api-73b2.onrender.com/api/meta';
-const GADS_PUB = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_TDOx18DHGNE131D6nUo7tieM7u2ccG67D_UJ92fsc6A6rdcCkq_7_EaGgkUDaOtGoKO-9yGc_ZYW/pub';
-const GADS_CSV = {
-  daily:    `${GADS_PUB}?gid=1644261807&single=true&output=csv`,
-  campaign: `${GADS_PUB}?gid=1433244860&single=true&output=csv`,
-  age:      `${GADS_PUB}?gid=1627764612&single=true&output=csv`,
-  gender:   `${GADS_PUB}?gid=1613742604&single=true&output=csv`,
-  location: `${GADS_PUB}?gid=1732071302&single=true&output=csv`,
-  adgroup:  `${GADS_PUB}?gid=363487600&single=true&output=csv`,
-  keyword:  `${GADS_PUB}?gid=355190306&single=true&output=csv`,
-};
+const GADS_API = 'https://verve-api-73b2.onrender.com/api/google-ads';
+
+function gadsApiToRows(apiRows) {
+  const dailyMap = {};
+  apiRows.forEach(r => {
+    if (!dailyMap[r.date]) dailyMap[r.date] = {'日期':r.date,'花費(TWD)':0,'曝光':0,'點擊':0,'購買':0,'營收(TWD)':0};
+    dailyMap[r.date]['花費(TWD)'] += r.cost;
+    dailyMap[r.date]['曝光']      += r.impressions;
+    dailyMap[r.date]['點擊']      += r.clicks;
+    dailyMap[r.date]['購買']      += r.conversions;
+    dailyMap[r.date]['營收(TWD)'] += r.conversion_value;
+  });
+  const daily = Object.values(dailyMap).sort((a,b) => a['日期']>b['日期']?1:-1);
+  const campaign = apiRows.map(r => ({'日期':r.date,'廣告活動':r.campaign_name,'花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
+  return { daily, campaign, age:[], gender:[], location:[], adgroup:[], keyword:[] };
+}
 
 // ── Date ──────────────────────────────────────────────────
 function toYMD(d) {
@@ -323,16 +329,10 @@ async function fetchData(forceRefresh = false) {
   try {
     const metaUrl = META_API;  // 不帶日期，讓後端用30天cache，前端metaAgg再篩選
     if (_cache[metaUrl]) delete _cache[metaUrl];
-    const [metaResult, gDailyTxt, gCampTxt, gAgeTxt, gGenderTxt, gLocTxt, gAgTxt, gKwTxt, sholineTxt,
+    const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => '{}'),
-      cachedFetch(GADS_CSV.daily),
-      cachedFetch(GADS_CSV.campaign),
-      cachedFetch(GADS_CSV.age),
-      cachedFetch(GADS_CSV.gender),
-      cachedFetch(GADS_CSV.location),
-      cachedFetch(GADS_CSV.adgroup),
-      cachedFetch(GADS_CSV.keyword),
+      fetch(GADS_API).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON),
       cachedFetch('./ga4_daily.json'),
       cachedFetch('./ga4_channels.json'),
@@ -347,13 +347,10 @@ async function fetchData(forceRefresh = false) {
     allAdData           = metaCache.ads || [];
     adUrlMap            = metaCache.ad_urls || {};
 
-    const gDaily  = parseCSV(gDailyTxt);
-    const gCamp   = parseCSV(gCampTxt);
-    const gAge    = parseCSV(gAgeTxt);
-    const gGender = parseCSV(gGenderTxt);
-    const gLoc    = parseCSV(gLocTxt);
-    const gAg     = parseCSV(gAgTxt);
-    const gKw     = parseCSV(gKwTxt);
+    const gadsRows = gadsApiToRows(gadsResult.data || []);
+    const gDaily   = gadsRows.daily;
+    const gCamp    = gadsRows.campaign;
+    const gAge     = [], gGender = [], gLoc = [], gAg = [], gKw = [];
     const sholineJson = JSON.parse(sholineTxt);
     const ga4Cache = {
       daily:               JSON.parse(ga4DailyTxt),
