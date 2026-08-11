@@ -185,8 +185,13 @@ GA4_ITEM_METRICS = [
 ]
 
 def ga4_client():
-    creds = service_account.Credentials.from_service_account_file(
-        "ga4_sa.json", scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+    from google.oauth2.credentials import Credentials
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ["GA4_REFRESH_TOKEN"],
+        client_id=os.environ["GA4_CLIENT_ID"],
+        client_secret=os.environ["GA4_CLIENT_SECRET"],
+        token_uri="https://oauth2.googleapis.com/token",
     )
     return BetaAnalyticsDataClient(credentials=creds)
 

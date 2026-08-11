@@ -23,13 +23,13 @@ jobs:
       - name: Install deps
         run: pip install requests google-analytics-data google-auth
 
-      - name: Write GA4 service account
-        run: echo "${{ secrets.GA4_SA_JSON }}" | base64 --decode > ga4_sa.json
-
       - name: Update caches
         env:
           SHOPLINE_TOKEN: ${{ secrets.SHOPLINE_TOKEN }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          GA4_CLIENT_ID: ${{ secrets.GA4_CLIENT_ID }}
+          GA4_CLIENT_SECRET: ${{ secrets.GA4_CLIENT_SECRET }}
+          GA4_REFRESH_TOKEN: ${{ secrets.GA4_REFRESH_TOKEN }}
         run: python update_cache.py
 
       - name: Commit and push
