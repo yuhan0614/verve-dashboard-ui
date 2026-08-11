@@ -232,7 +232,8 @@ const SHOLINE_JSON = './sl_cache.json';
 const META_API = 'https://verve-api-73b2.onrender.com/api/meta';
 const GADS_API = 'https://verve-api-73b2.onrender.com/api/google-ads';
 
-function gadsApiToRows(apiRows) {
+function gadsApiToRows(apiResult) {
+  const apiRows = Array.isArray(apiResult) ? apiResult : (apiResult.data || []);
   const dailyMap = {};
   apiRows.forEach(r => {
     if (!dailyMap[r.date]) dailyMap[r.date] = {'日期':r.date,'花費(TWD)':0,'曝光':0,'點擊':0,'購買':0,'營收(TWD)':0};
@@ -244,7 +245,9 @@ function gadsApiToRows(apiRows) {
   });
   const daily = Object.values(dailyMap).sort((a,b) => a['日期']>b['日期']?1:-1);
   const campaign = apiRows.map(r => ({'日期':r.date,'廣告活動':r.campaign_name,'花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
-  return { daily, campaign, age:[], gender:[], location:[], adgroup:[], keyword:[] };
+  const age    = (apiResult.age    || []).map(r => ({'年齡層':r.age,   '花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
+  const gender = (apiResult.gender || []).map(r => ({'性別':r.gender,  '花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
+  return { daily, campaign, age, gender, location:[], adgroup:[], keyword:[] };
 }
 
 // ── Date ──────────────────────────────────────────────────
@@ -347,10 +350,10 @@ async function fetchData(forceRefresh = false) {
     allAdData           = metaCache.ads || [];
     adUrlMap            = metaCache.ad_urls || {};
 
-    const gadsRows = gadsApiToRows(gadsResult.data || []);
+    const gadsRows = gadsApiToRows(gadsResult);
     const gDaily   = gadsRows.daily;
     const gCamp    = gadsRows.campaign;
-    const gAge     = [], gGender = [], gLoc = [], gAg = [], gKw = [];
+    const gAge     = gadsRows.age, gGender = gadsRows.gender, gLoc = [], gAg = [], gKw = [];
     const sholineJson = JSON.parse(sholineTxt);
     const ga4Cache = {
       daily:               JSON.parse(ga4DailyTxt),
@@ -719,10 +722,10 @@ function renderDemographic(ageData, genderData) {
     return `
       <div style="display:flex;gap:24px;padding:20px;align-items:center">
         <div style="flex:2;min-width:0">
-          <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
-          <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
+          <div style="position:relative;height:160px"><canvas id="${pieId}"></canvas></div>
+          <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 16px;padding:6px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
         </div>
-        <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
+        <div style="flex:3;min-width:0;position:relative;height:200px"><canvas id="${barId}"></canvas></div>
       </div>
       <div class="table-wrap"><table>
         <thead><tr>
@@ -1196,10 +1199,10 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
         <div class="table-header"><h3>${cardTitle}</h3></div>
         <div style="display:flex;gap:24px;padding:20px;align-items:center">
           <div style="flex:2;min-width:0">
-            <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
-            <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
+            <div style="position:relative;height:160px"><canvas id="${pieId}"></canvas></div>
+            <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 16px;padding:6px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
           </div>
-          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
+          <div style="flex:3;min-width:0;position:relative;height:200px"><canvas id="${barId}"></canvas></div>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>${labelTitle}</th><th>花費</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th></tr></thead>
@@ -1412,12 +1415,7 @@ function renderGoogleAds(data, since, until, prev) {
     options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right', labels:{ font:{size:10}, boxWidth:10, padding:6 } } } }
   });
 
-  // 年齡 & 性別 — 活動篩選
-  const gadsDemoCamps = [...new Set(
-    [...filterByDate(data.age, since, until), ...filterByDate(data.gender, since, until)]
-      .map(r=>r['廣告活動']).filter(Boolean)
-  )].sort();
-
+  // 年齡 & 性別 — Google Ads 聚合資料，無日期欄位，直接用全量
   let _gadsDemoCharts = [];
 
   function drawGadsDemo(selectedCamp) {
@@ -1427,8 +1425,8 @@ function renderGoogleAds(data, since, until, prev) {
     const AGE_EXCL = ['不明','Unknown','unknown'];
     const gAgeOrder2 = ['18-24','25-34','35-44','45-54','55-64','65-UP','65+','Unknown'];
 
-    const filteredAge    = filterByDate(data.age, since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
-    const filteredGender = filterByDate(data.gender, since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+    const filteredAge    = (data.age    || []).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+    const filteredGender = (data.gender || []).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
 
     const agg2 = (rows, dimKey) => {
       const map = {};
@@ -1474,10 +1472,10 @@ function renderGoogleAds(data, since, until, prev) {
         <div class="table-header"><h3>${title}</h3></div>
         <div style="display:flex;gap:24px;padding:20px;align-items:center">
           <div style="flex:2;min-width:0">
-            <div style="position:relative;height:240px"><canvas id="${pieId}"></canvas></div>
-            <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 20px;padding:10px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
+            <div style="position:relative;height:160px"><canvas id="${pieId}"></canvas></div>
+            <div id="${pieId}-legend" style="display:grid;grid-template-columns:repeat(2,max-content);gap:2px 16px;padding:6px 4px;font-size:11px;color:#555;width:fit-content;margin:0 auto"></div>
           </div>
-          <div style="flex:3;min-width:0;position:relative;height:320px"><canvas id="${barId}"></canvas></div>
+          <div style="flex:3;min-width:0;position:relative;height:200px"><canvas id="${barId}"></canvas></div>
         </div>
         ${gadsTable(rows,[{label:dimKey,key:dimKey},...metricCols])}`;
       container.appendChild(card);
