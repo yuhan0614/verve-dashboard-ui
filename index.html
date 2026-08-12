@@ -217,6 +217,7 @@ let trendChart, pieChart;
 let overallSpendChart = null, overallPieChart = null;
 let allAdData = [];
 let adUrlMap = {};
+let adSince = '', adUntil = '';
 let sortKey = '', sortDir = -1;
 
 // in-memory cache — persists across date changes without re-fetching
@@ -346,6 +347,7 @@ async function fetchData(forceRefresh = false) {
     const ageData       = metaAgg(metaCache.age       || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name','age']);
     const genderData    = metaAgg(metaCache.gender    || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name','gender']);
     allAdData           = metaCache.ads || [];
+    adSince = since; adUntil = until;
     adUrlMap            = metaCache.ad_urls || {};
 
     const gadsRows = gadsApiToRows(gadsResult);
@@ -439,21 +441,19 @@ function calcPrevDates(since, until) {
 
 // ── Perf Tab ──────────────────────────────────────────────
 function renderPerf(camps, trend, since, until, prevTrendData) {
-  const total = camps.reduce((a,r) => ({
+  // 用 daily trendData 算當期合計（已篩 since/until），跟 prevTrendData 才能做同口徑比較
+  const sumRows = rows => rows.reduce((a,r) => ({
     spend: a.spend+(r.spend||0), impressions: a.impressions+(r.impressions||0),
     link_clicks: a.link_clicks+(r.link_clicks||0), add_to_cart: a.add_to_cart+(r.add_to_cart||0),
     purchase: a.purchase+(r.purchase||0), purchase_value: a.purchase_value+(r.purchase_value||0),
   }), {spend:0,impressions:0,link_clicks:0,add_to_cart:0,purchase:0,purchase_value:0});
+  const total = sumRows(trend||[]);
   const roas = total.spend > 0 ? total.purchase_value/total.spend : 0;
   const cpa = total.purchase > 0 ? total.spend/total.purchase : 0;
   const sorted = [...camps].sort((a,b)=>(b.spend||0)-(a.spend||0));
   const maxSpend = sorted[0]?.spend || 1;
 
-  const pt = (prevTrendData||[]).reduce((a,r) => ({
-    spend: a.spend+(r.spend||0), impressions: a.impressions+(r.impressions||0),
-    link_clicks: a.link_clicks+(r.link_clicks||0), add_to_cart: a.add_to_cart+(r.add_to_cart||0),
-    purchase: a.purchase+(r.purchase||0), purchase_value: a.purchase_value+(r.purchase_value||0),
-  }), {spend:0,impressions:0,link_clicks:0,add_to_cart:0,purchase:0,purchase_value:0});
+  const pt = sumRows(prevTrendData||[]);
   const prevRoas = pt.spend > 0 ? pt.purchase_value/pt.spend : 0;
   const prevCpa  = pt.purchase > 0 ? pt.spend/pt.purchase : 0;
 
@@ -610,6 +610,7 @@ function applyAdFilter() {
   const camp = document.getElementById('campFilter')?.value || '';
   const q = (document.getElementById('adSearch')?.value || '').toLowerCase();
   const filtered = allAdData.filter(r =>
+    (!adSince || !r.date_start || (r.date_start >= adSince && r.date_start <= adUntil)) &&
     (!camp || r.campaign_name === camp) &&
     (!q || (r.ad_name||'').toLowerCase().includes(q))
   );
