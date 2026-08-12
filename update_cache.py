@@ -426,6 +426,21 @@ def update_meta():
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+RENDER_GADS_API = "https://verve-api-73b2.onrender.com/api/google-ads"
+
+def update_gads():
+    start = (TODAY - timedelta(days=30)).strftime("%Y-%m-%d")
+    end   = TODAY.strftime("%Y-%m-%d")
+    r = requests.get(f"{RENDER_GADS_API}?since={start}&until={end}", timeout=120)
+    data = r.json()
+    if "error" in data:
+        raise Exception(data["error"])
+    data["cached_since"] = start
+    data["cached_until"] = end
+    with open("gads_cache.json", "w") as f:
+        json.dump(data, f, ensure_ascii=False)
+    print(f"[GADS] {len(data.get('data',[]))} rows, {len(data.get('age',[]))} age, {len(data.get('gender',[]))} gender")
+
 if __name__ == "__main__":
     print("=== Updating SHOPLINE ===")
     update_shopline()
@@ -439,4 +454,9 @@ if __name__ == "__main__":
         update_meta()
     except Exception as e:
         print(f"[Meta] SKIPPED — {e}")
+    print("=== Updating Google Ads ===")
+    try:
+        update_gads()
+    except Exception as e:
+        print(f"[GADS] SKIPPED — {e}")
     print("=== Done ===")
