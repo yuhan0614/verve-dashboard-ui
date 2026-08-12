@@ -332,16 +332,17 @@ async function fetchData(forceRefresh = false) {
     // 預設讀靜態快取（快、不怕 Render cold start）；forceRefresh 才打後端
     const metaUrl = forceRefresh ? META_API : './meta_cache.json';
     if (forceRefresh) delete _cache[metaUrl];
+    const safeParse = (txt, fallback) => { try { return JSON.parse(txt); } catch { return fallback; } };
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => cachedFetch('./meta_cache.json').catch(() => '{}')),
       fetch(`${GADS_API}?since=${since}&until=${until}`).then(r=>r.json()).catch(() => ({data:[]})),
-      cachedFetch(SHOLINE_JSON),
-      cachedFetch('./ga4_daily.json'),
-      cachedFetch('./ga4_channels.json'),
-      cachedFetch('./ga4_source_medium.json'),
+      cachedFetch(SHOLINE_JSON).catch(() => '{}'),
+      cachedFetch('./ga4_daily.json').catch(() => '[]'),
+      cachedFetch('./ga4_channels.json').catch(() => '[]'),
+      cachedFetch('./ga4_source_medium.json').catch(() => '[]'),
     ]);
-    const metaCache = (() => { try { return JSON.parse(metaResult); } catch { return {}; } })();
+    const metaCache = safeParse(metaResult, {});
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
     const campData      = metaAgg(metaCache.campaigns || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name']);
@@ -355,26 +356,26 @@ async function fetchData(forceRefresh = false) {
     const gDaily   = gadsRows.daily;
     const gCamp    = gadsRows.campaign;
     const gAge     = gadsRows.age, gGender = gadsRows.gender, gLoc = [], gAg = [], gKw = [];
-    const sholineJson = JSON.parse(sholineTxt);
+    const sholineJson = safeParse(sholineTxt, {});
     const ga4Cache = {
-      daily:               JSON.parse(ga4DailyTxt),
-      daily_channels:      JSON.parse(ga4ChTxt),
-      daily_source_medium: JSON.parse(ga4SmTxt),
+      daily:               safeParse(ga4DailyTxt, []),
+      daily_channels:      safeParse(ga4ChTxt, []),
+      daily_source_medium: safeParse(ga4SmTxt, []),
       daily_items:         [],
       daily_search:        [],
     };
     // lazy load items + search + SL product/discount data in background
     let slItemsCache = {}, slDiscCache = {};
     Promise.all([
-      cachedFetch('./ga4_items.json'),
-      cachedFetch('./ga4_search.json'),
-      cachedFetch('./sl_items_cache.json'),
-      cachedFetch('./sl_discounts_cache.json'),
+      cachedFetch('./ga4_items.json').catch(() => '[]'),
+      cachedFetch('./ga4_search.json').catch(() => '[]'),
+      cachedFetch('./sl_items_cache.json').catch(() => '{}'),
+      cachedFetch('./sl_discounts_cache.json').catch(() => '{}'),
     ]).then(([itemsTxt, searchTxt, slItemsTxt, slDiscTxt]) => {
-      ga4Cache.daily_items  = JSON.parse(itemsTxt);
-      ga4Cache.daily_search = JSON.parse(searchTxt);
-      slItemsCache = JSON.parse(slItemsTxt);
-      slDiscCache  = JSON.parse(slDiscTxt);
+      ga4Cache.daily_items  = safeParse(itemsTxt, []);
+      ga4Cache.daily_search = safeParse(searchTxt, []);
+      slItemsCache = safeParse(slItemsTxt, {});
+      slDiscCache  = safeParse(slDiscTxt, {});
       renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);
       renderSholine(sholineJson, since, until, trendData, gDaily, prev, prevTrendData, slItemsCache, slDiscCache, ga4Cache.daily_items);
     });
