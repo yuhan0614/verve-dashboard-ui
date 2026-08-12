@@ -329,11 +329,12 @@ async function fetchData(forceRefresh = false) {
   }
 
   try {
-    const metaUrl = META_API;  // 不帶日期，讓後端用30天cache，前端metaAgg再篩選
-    if (_cache[metaUrl]) delete _cache[metaUrl];
+    // 預設讀靜態快取（快、不怕 Render cold start）；forceRefresh 才打後端
+    const metaUrl = forceRefresh ? META_API : './meta_cache.json';
+    if (forceRefresh) delete _cache[metaUrl];
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
-      cachedFetch(metaUrl).catch(() => '{}'),
+      cachedFetch(metaUrl).catch(() => cachedFetch('./meta_cache.json').catch(() => '{}')),
       fetch(`${GADS_API}?since=${since}&until=${until}`).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON),
       cachedFetch('./ga4_daily.json'),
