@@ -351,9 +351,9 @@ async function fetchData(forceRefresh = false) {
     const metaCache = safeParse(metaResult, {});
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
-    const campData      = metaAgg(metaCache.campaigns || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name']);
-    const ageData       = metaAgg(metaCache.age       || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name','age']);
-    const genderData    = metaAgg(metaCache.gender    || [], '2000-01-01', '2099-12-31', ['campaign_id','campaign_name','gender']);
+    const campData      = metaAgg(metaCache.campaigns || [], since, until, ['campaign_id','campaign_name']);
+    const ageData       = metaAgg(metaCache.age       || [], since, until, ['campaign_id','campaign_name','age']);
+    const genderData    = metaAgg(metaCache.gender    || [], since, until, ['campaign_id','campaign_name','gender']);
     allAdData           = metaCache.ads || [];
     adSince = since; adUntil = until;
     adUrlMap            = metaCache.ad_urls || {};
