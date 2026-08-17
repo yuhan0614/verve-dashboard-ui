@@ -35,21 +35,41 @@ def sl_fetch(start, end):
         previous_id = items[-1]["id"]
     return [o for o in orders if not o.get("channel")]
 
-def sl_agg(orders):
+def sl_fetch_returns(start, end):
+    """退貨單（/return_orders），已退款的，按建立日期篩選"""
+    ret, previous_id = [], None
+    while True:
+        params = {"created_after": start, "created_before": end,
+                  "per_page": 250, "payment_status_filter": "refunded"}
+        if previous_id:
+            params["previous_id"] = previous_id
+        resp = requests.get(f"{SL_BASE}/return_orders", headers=SL_HEADS, params=params, timeout=120)
+        resp.raise_for_status()
+        items = resp.json().get("items", [])
+        if not items:
+            break
+        ret.extend(items)
+        if len(items) < 250:
+            break
+        previous_id = items[-1]["id"]
+    return ret
+
+def sl_agg(orders, return_orders=None):
     gmv = cancelled = returns = 0
     order_count = 0
     for o in orders:
         total = (o.get("total") or {}).get("dollars", 0) or 0
         status = o.get("status", "")
-        fin    = o.get("financial_status", "")
         gmv += total
         if status == "cancelled":
             cancelled += total
-        elif fin == "refunded":
-            returns += total  # 退款不算 revenue
         else:
             order_count += 1
-    revenue = gmv - cancelled - returns  # 總營業額 = 成交總額 − 退貨 − 取消
+    # 退貨金額從 /return_orders 拿，financial_status 欄位永遠是空的
+    if return_orders:
+        for ro in return_orders:
+            returns += (ro.get("total") or {}).get("dollars", 0) or 0
+    revenue = gmv - cancelled - returns  # 總營業額 = 成交總額 − 取消 − 退貨
     return {
         "gmv":      round(gmv),
         "revenue":  round(revenue),
@@ -114,7 +134,9 @@ def update_shopline():
         end   = f"{d}T23:59:59+08:00"
         try:
             orders = sl_fetch(start, end)
-            cache[d] = sl_agg(orders)
+            return_orders = sl_fetch_returns(start, end)
+            cache[d] = sl_agg(orders, return_orders)
+            print(f"[SL-returns] {d}: {len(return_orders)} return orders, returns={cache[d]['returns']}")
 
             items_map, disc_map = {}, {}
             for o in orders:
