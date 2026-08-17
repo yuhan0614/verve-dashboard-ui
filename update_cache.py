@@ -35,11 +35,18 @@ def sl_fetch(start, end):
         previous_id = items[-1]["id"]
     return [o for o in orders if not o.get("channel")]
 
-def sl_fetch_returns(start, end):
-    """退貨單（/return_orders），已退款的，按建立日期篩選"""
+def sl_fetch_returns(date_str):
+    """退貨單（/return_orders），已退款且非取消，按建立日期篩選（API 要求 UTC）"""
+    # 台灣 YYYY-MM-DD 00:00 ~ 23:59:59 轉成 UTC
+    tz_tw = timezone(timedelta(hours=8))
+    day_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=tz_tw)
+    day_end   = day_start + timedelta(days=1) - timedelta(seconds=1)
+    utc_start = day_start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    utc_end   = day_end.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     ret, previous_id = [], None
     while True:
-        params = {"created_after": start, "created_before": end,
+        params = {"created_after": utc_start, "created_before": utc_end,
                   "per_page": 250, "payment_status_filter": "refunded"}
         if previous_id:
             params["previous_id"] = previous_id
@@ -48,7 +55,8 @@ def sl_fetch_returns(start, end):
         items = resp.json().get("items", [])
         if not items:
             break
-        ret.extend(items)
+        # 排除已取消的退貨單
+        ret.extend([r for r in items if r.get("status") != "cancelled"])
         if len(items) < 250:
             break
         previous_id = items[-1]["id"]
@@ -134,7 +142,7 @@ def update_shopline():
         end   = f"{d}T23:59:59+08:00"
         try:
             orders = sl_fetch(start, end)
-            return_orders = sl_fetch_returns(start, end)
+            return_orders = sl_fetch_returns(d)
             cache[d] = sl_agg(orders, return_orders)
             print(f"[SL-returns] {d}: {len(return_orders)} return orders, returns={cache[d]['returns']}")
 
