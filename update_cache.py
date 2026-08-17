@@ -36,7 +36,7 @@ def sl_fetch(start, end):
     return [o for o in orders if not o.get("channel")]
 
 def sl_agg(orders):
-    gmv = revenue = cancelled = returns = 0
+    gmv = cancelled = returns = 0
     order_count = 0
     for o in orders:
         total = (o.get("total") or {}).get("dollars", 0) or 0
@@ -46,9 +46,10 @@ def sl_agg(orders):
         if status == "cancelled":
             cancelled += total
         elif fin == "refunded":
-            returns += total; revenue += total
+            returns += total  # 退款不算 revenue
         else:
-            revenue += total; order_count += 1
+            order_count += 1
+    revenue = gmv - cancelled - returns  # 總營業額 = 成交總額 − 退貨 − 取消
     return {
         "gmv":      round(gmv),
         "revenue":  round(revenue),
