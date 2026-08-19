@@ -333,11 +333,12 @@ async function fetchData(forceRefresh = false) {
     const metaUrl = forceRefresh ? META_API : './meta_cache.json';
     if (forceRefresh) delete _cache[metaUrl];
     const safeParse = (txt, fallback) => { try { return JSON.parse(txt); } catch { return fallback; } };
-    if (forceRefresh) delete _cache['./gads_cache.json'];
+    const gadsUrl = forceRefresh ? `./gads_cache.json?t=${Date.now()}` : './gads_cache.json';
+    if (forceRefresh) delete _cache[gadsUrl];
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => cachedFetch('./meta_cache.json').catch(() => '{}')),
-      cachedFetch('./gads_cache.json').then(t=>safeParse(t,{data:[]})).catch(() => ({data:[]})),
+      cachedFetch(gadsUrl).then(t=>safeParse(t,{data:[]})).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON).catch(() => '{}'),
       cachedFetch('./ga4_daily.json').catch(() => '[]'),
       cachedFetch('./ga4_channels.json').catch(() => '[]'),
