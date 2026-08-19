@@ -334,15 +334,14 @@ async function fetchData(forceRefresh = false) {
     if (forceRefresh) delete _cache[metaUrl];
     const safeParse = (txt, fallback) => { try { return JSON.parse(txt); } catch { return fallback; } };
     const gadsStaticUrl = `./gads_cache.json?t=${Date.now()}`;
-    const gadsLive = forceRefresh
-      ? fetch(`${GADS_API}?since=${since}&until=${until}`, {signal: AbortSignal.timeout(20000)})
-          .then(r => r.json())
-          .catch(() => fetch(gadsStaticUrl).then(r=>r.json()))
-      : fetch(gadsStaticUrl).then(r=>r.json());
+    // 背景打 Render，不阻塞主流程
+    const gadsBgPromise = forceRefresh
+      ? fetch(`${GADS_API}?since=${since}&until=${until}`).then(r => r.json()).catch(() => null)
+      : null;
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       cachedFetch(metaUrl).catch(() => cachedFetch('./meta_cache.json').catch(() => '{}')),
-      gadsLive.catch(() => ({data:[]})),
+      fetch(gadsStaticUrl).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON).catch(() => '{}'),
       cachedFetch('./ga4_daily.json').catch(() => '[]'),
       cachedFetch('./ga4_channels.json').catch(() => '[]'),
@@ -392,18 +391,36 @@ async function fetchData(forceRefresh = false) {
     renderPerf(campData, trendData, since, until, prevTrendData);
     renderCreative();
     renderDemographic(ageData, genderData);
-    renderGoogleAds({ daily: gDaily, campaign: gCamp, age: gAge, gender: gGender, location: gLoc, adgroup: gAg, keyword: gKw }, since, until, prev);
-    const kwRows = aggRows(filterByDate(gKw, since, until), ['關鍵字']).map(r => {
-      const ctr  = r.imp > 0 ? r.clk/r.imp*100 : 0;
-      const cpa  = r.purchase > 0 ? r.spend/r.purchase : 0;
-      const roas = r.spend > 0 ? r.revenue/r.spend : 0;
-      return { ...r._keys, spend:r.spend, imp:r.imp, clk:r.clk, ctr, purchase:r.purchase, revenue:r.revenue, cpa, roas };
-    });
-    renderGoogleKeyword(kwRows);
+    function applyGads(gadsData) {
+      const r = gadsApiToRows(gadsData);
+      const kw = aggRows(filterByDate(r.keyword, since, until), ['關鍵字']).map(row => {
+        const ctr  = row.imp > 0 ? row.clk/row.imp*100 : 0;
+        const cpa  = row.purchase > 0 ? row.spend/row.purchase : 0;
+        const roas = row.spend > 0 ? row.revenue/row.spend : 0;
+        return { ...row._keys, spend:row.spend, imp:row.imp, clk:row.clk, ctr, purchase:row.purchase, revenue:row.revenue, cpa, roas };
+      });
+      renderOverall(trendData, r.daily, since, until, ageData, genderData, r.age, r.gender, prevTrendData, prev, ga4Cache);
+      renderGoogleAds({ daily: r.daily, campaign: r.campaign, age: r.age, gender: r.gender, location: [], adgroup: [], keyword: r.keyword }, since, until, prev);
+      renderGoogleKeyword(kw);
+    }
+
+    applyGads(gadsResult);
+
     const updatedAt = metaCache.updated || new Date().toLocaleString('zh-TW');
     document.getElementById('lastUpdate').textContent = updatedAt;
-    status.textContent = `✓ 完成・${campData.length} campaigns・${allAdData.length} 素材`;
     status.className = 'status-text ok';
+
+    if (gadsBgPromise) {
+      status.textContent = `✓ 完成・${campData.length} campaigns・${allAdData.length} 素材（Google Ads 更新中…）`;
+      gadsBgPromise.then(liveData => {
+        if (liveData && !liveData.error) {
+          applyGads(liveData);
+        }
+        status.textContent = `✓ 完成・${campData.length} campaigns・${allAdData.length} 素材`;
+      });
+    } else {
+      status.textContent = `✓ 完成・${campData.length} campaigns・${allAdData.length} 素材`;
+    }
   } catch(e) {
     status.textContent = `❌ ${e.message}`; status.className = 'status-text err';
   } finally {
