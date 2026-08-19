@@ -334,10 +334,7 @@ async function fetchData(forceRefresh = false) {
     if (forceRefresh) delete _cache[metaUrl];
     const safeParse = (txt, fallback) => { try { return JSON.parse(txt); } catch { return fallback; } };
     const gadsStaticUrl = `./gads_cache.json?t=${Date.now()}`;
-    // 背景打 Render，不阻塞主流程
-    const gadsBgPromise = forceRefresh
-      ? fetch(`${GADS_API}?since=${since}&until=${until}`).then(r => r.json()).catch(() => null)
-      : null;
+    const gadsBgPromise = null;
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       (forceRefresh
