@@ -228,8 +228,8 @@ async function cachedFetch(url) {
 }
 
 const SHOLINE_JSON = './sl_cache.json';
-const META_API = 'https://verve-api-73b2.onrender.com/api/meta';
-const GADS_API = 'https://verve-api-73b2.onrender.com/api/google-ads';
+const META_API = 'https://verve-api.vercel.app/api/meta';
+const GADS_API = 'https://verve-api.vercel.app/api/google-ads';
 
 function gadsApiToRows(apiResult) {
   const apiRows = Array.isArray(apiResult) ? apiResult : (apiResult.data || []);
