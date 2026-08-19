@@ -229,7 +229,7 @@ async function cachedFetch(url) {
 
 const SHOLINE_JSON = './sl_cache.json';
 const META_API = 'https://verve-api.vercel.app/api/meta';
-const GADS_API = 'https://verve-api.vercel.app/api/google-ads';
+const GADS_API = 'https://verve-api-73b2.onrender.com/api/google-ads';
 
 function gadsApiToRows(apiResult) {
   const apiRows = Array.isArray(apiResult) ? apiResult : (apiResult.data || []);
@@ -340,7 +340,10 @@ async function fetchData(forceRefresh = false) {
       : null;
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
-      cachedFetch(metaUrl).catch(() => cachedFetch('./meta_cache.json').catch(() => '{}')),
+      (forceRefresh
+        ? fetch(metaUrl).then(r => r.ok ? r.text() : Promise.reject()).catch(() => fetch('./meta_cache.json').then(r=>r.text()))
+        : cachedFetch(metaUrl)
+      ).catch(() => '{}'),
       fetch(gadsStaticUrl).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON).catch(() => '{}'),
       cachedFetch('./ga4_daily.json').catch(() => '[]'),
