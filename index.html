@@ -216,6 +216,7 @@ const ACCOUNT_ID = '1417409513448597';
 let trendChart, pieChart;
 let overallSpendChart = null, overallPieChart = null;
 let allAdData = [];
+let allAssetData = [];
 let adUrlMap = {};
 let adSince = '', adUntil = '';
 let sortKey = '', sortDir = -1;
@@ -356,6 +357,7 @@ async function fetchData(forceRefresh = false) {
     const ageData       = metaAgg(metaCache.age       || [], since, until, ['campaign_id','campaign_name','age']);
     const genderData    = metaAgg(metaCache.gender    || [], since, until, ['campaign_id','campaign_name','gender']);
     allAdData           = metaCache.ads || [];
+    allAssetData        = metaCache.assets || [];
     adSince = since; adUntil = until;
     adUrlMap            = metaCache.ad_urls || {};
 
@@ -609,12 +611,12 @@ function renderCreative() {
   sortAds('spend');
 }
 
-function groupByName(rows) {
+function groupRows(rows, keyFn, metaFn) {
   const map = {};
   for (const r of rows) {
-    const key = r.ad_name || '—';
+    const key = keyFn(r);
     if (!map[key]) {
-      map[key] = { ad_name: key, spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
+      map[key] = { ...metaFn(r), spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
     }
     const g = map[key];
     g.spend         += r.spend         || 0;
@@ -636,12 +638,25 @@ function groupByName(rows) {
 function applyAdFilter() {
   const camp = document.getElementById('campFilter')?.value || '';
   const q = (document.getElementById('adSearch')?.value || '').toLowerCase();
-  const filtered = allAdData.filter(r =>
-    (!adSince || !r.date_start || (r.date_start >= adSince && r.date_start <= adUntil)) &&
-    (!camp || r.campaign_name === camp) &&
-    (!q || (r.ad_name||'').toLowerCase().includes(q))
-  );
-  renderAdTable(groupByName(filtered));
+  const inRange = r => (!adSince || !r.date_start || (r.date_start >= adSince && r.date_start <= adUntil));
+  const inCamp  = r => (!camp || r.campaign_name === camp);
+
+  // 有活用創意素材資料的廣告，改用素材層級呈現，避免跟廣告層級重複計算
+  const assetRows = allAssetData.filter(r => inRange(r) && inCamp(r) && r.asset_id);
+  const assetAdIds = new Set(assetRows.map(r => r.ad_id));
+  const adRows = allAdData.filter(r => inRange(r) && inCamp(r) && !assetAdIds.has(r.ad_id));
+
+  const assets = groupRows(assetRows,
+    r => `${r.asset_kind}|${r.asset_id}`,
+    r => ({ ad_name: r.asset_name || r.asset_id, kind: r.asset_kind,
+            thumb: r.asset_url || '', ad_names: r.ad_name || '' }));
+  const ads = groupRows(adRows,
+    r => r.ad_name || '—',
+    r => ({ ad_name: r.ad_name || '—', kind: 'ad',
+            thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '', ad_names: '' }));
+
+  const all = [...assets, ...ads].filter(r => !q || (r.ad_name||'').toLowerCase().includes(q));
+  renderAdTable(all);
 }
 
 function sortAds(key) {
@@ -662,13 +677,14 @@ function renderAdTable(data) {
   document.getElementById('adCount').textContent = `${sorted.length} 筆`;
   document.getElementById('adTableBody').innerHTML = sorted.map(r => {
     const bw = Math.round((r.spend||0)/maxSpend*60);
-    const thumbUrl = `${META_API.replace('/api/meta','/api/thumb')}?name=${encodeURIComponent(r.ad_name||'')}`;
-    const thumbCell = r.ad_name
-      ? `<img src="${thumbUrl}" loading="lazy" style="width:72px;height:72px;object-fit:cover;border-radius:6px;display:block;border:1px solid #eee;" onerror="this.style.display='none'">`
+    const thumbCell = r.thumb
+      ? `<img src="${r.thumb}" loading="lazy" referrerpolicy="no-referrer" style="width:120px;height:120px;object-fit:cover;border-radius:8px;display:block;margin:0 auto;border:1px solid #eee;" onerror="this.parentNode.innerHTML='<span class=\\'na\\'>—</span>'">`
       : '<span class="na">—</span>';
+    const badge = r.kind === 'image' ? '<span class="gads-badge">圖像</span>'
+                : r.kind === 'video' ? '<span class="gads-badge">影片</span>' : '';
     return `<tr>
       <td>
-        <span class="cell-name" title="${r.ad_name}">${r.ad_name||'—'}</span>
+        <span class="cell-name" title="${r.ad_name}">${r.ad_name||'—'}</span>${badge}
       </td>
       <td style="text-align:center">${thumbCell}</td>
       <td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>

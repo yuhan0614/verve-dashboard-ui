@@ -345,6 +345,13 @@ def _parse_meta(row, level):
     }
     if "age"    in row: r["age"]    = row["age"]
     if "gender" in row: r["gender"] = row["gender"]
+    for k, kind in (("image_asset", "image"), ("video_asset", "video")):
+        if k in row:
+            a = row[k] or {}
+            r["asset_kind"] = kind
+            r["asset_id"]   = str(a.get("id") or a.get("hash") or "")
+            r["asset_name"] = a.get("name") or a.get("hash") or ""
+            r["asset_url"]  = a.get("url") or ""
     if level in ("campaign", "adset", "ad"):
         r["campaign_id"]   = row.get("campaign_id", "")
         r["campaign_name"] = row.get("campaign_name", "")
@@ -385,10 +392,11 @@ def meta_fetch_ad_urls():
     url = f"{META_BASE}/act_{META_ACCOUNT}/ads"
     params = {
         "access_token": META_TOKEN,
-        "fields": "name,creative{object_story_spec,thumbnail_url,image_url}",
-        "limit": 500,
+        "fields": "name,creative{thumbnail_url,image_url}",
+        "limit": 100,
     }
-    while url:
+    pages = 0
+    while url and pages < 100:
         r = requests.get(url, params=params, timeout=120)
         data = r.json()
         if "error" in data:
@@ -396,17 +404,14 @@ def meta_fetch_ad_urls():
         for ad in data.get("data", []):
             name = ad.get("name", "")
             creative = ad.get("creative") or {}
-            spec = creative.get("object_story_spec") or {}
-            dest = None
-            if "link_data" in spec:
-                dest = spec["link_data"].get("link")
-            elif "video_data" in spec:
-                dest = (spec["video_data"].get("call_to_action") or {}).get("value", {}).get("link")
-            thumb = creative.get("thumbnail_url") or creative.get("image_url")
-            if name not in result:
-                result[name] = {"url": dest if dest and "{{" not in (dest or "") else None, "thumb": thumb}
+            if name and name not in result:
+                result[name] = {
+                    "thumb": creative.get("thumbnail_url") or "",
+                    "image": creative.get("image_url") or "",
+                }
         url = data.get("paging", {}).get("next")
         params = {}
+        pages += 1
     return result
 
 def update_meta():
@@ -444,6 +449,20 @@ def update_meta():
     new_gen = meta_fetch(start, end, "campaign", breakdowns="gender")
     cache["gender"] = merge(cache["gender"], new_gen, lambda r: (r["date_start"], r["campaign_id"], r.get("gender","")))
     print(f"[Meta] gender: {len(new_gen)} rows")
+
+    new_assets = []
+    for bd in ("image_asset", "video_asset"):
+        try:
+            rows = meta_fetch(start, end, "ad", breakdowns=bd)
+            new_assets.extend(rows)
+            print(f"[Meta] {bd}: {len(rows)} rows")
+        except Exception as e:
+            print(f"[Meta] {bd} SKIPPED — {e}")
+    if new_assets:
+        cache["assets"] = merge(
+            cache.get("assets", []), new_assets,
+            lambda r: (r["date_start"], r.get("ad_id",""), r.get("asset_kind",""), r.get("asset_id","")))
+        print(f"[Meta] assets total: {len(cache['assets'])} rows")
 
     try:
         cache["ad_urls"] = meta_fetch_ad_urls()
