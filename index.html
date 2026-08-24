@@ -165,7 +165,6 @@
   <button class="tab-btn" onclick="switchTab('perf')">📊 Meta 成效</button>
   <button class="tab-btn" onclick="switchTab('creative')">🎨 Meta 素材</button>
   <button class="tab-btn" onclick="switchTab('gads')">🔍 Google Ads</button>
-  <button class="tab-btn" onclick="switchTab('gkw')">🔑 Google 關鍵字</button>
 </div>
 </div>
 
@@ -195,9 +194,6 @@
     <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
-  <!-- Google 關鍵字 tab -->
-  <div class="tab-panel" id="tab-gkw">
-    <div style="text-align:center;padding:60px;color:#aaa;">點擊「更新資料」開始載入</div>
   </div>
 
   <!-- SHOLINE tab -->
@@ -245,8 +241,8 @@ function gadsApiToRows(apiResult) {
   });
   const daily = Object.values(dailyMap).sort((a,b) => a['日期']>b['日期']?1:-1);
   const campaign = apiRows.map(r => ({'日期':r.date,'廣告活動':r.campaign_name,'花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
-  const age    = (apiResult.age    || []).map(r => ({'年齡層':r.age,   '花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
-  const gender = (apiResult.gender || []).map(r => ({'性別':r.gender,  '花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
+  const age    = (apiResult.age    || []).map(r => ({'年齡層':r.age,   '日期':r.date||'','廣告活動':r.campaign_name||'','花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
+  const gender = (apiResult.gender || []).map(r => ({'性別':r.gender,  '日期':r.date||'','廣告活動':r.campaign_name||'','花費(TWD)':r.cost,'曝光':r.impressions,'點擊':r.clicks,'購買':r.conversions,'營收(TWD)':r.conversion_value}));
   return { daily, campaign, age, gender, location:[], adgroup:[], keyword:[] };
 }
 
@@ -397,15 +393,8 @@ async function fetchData(forceRefresh = false) {
     renderDemographic(ageData, genderData);
     function applyGads(gadsData) {
       const r = gadsApiToRows(gadsData);
-      const kw = aggRows(filterByDate(r.keyword, since, until), ['關鍵字']).map(row => {
-        const ctr  = row.imp > 0 ? row.clk/row.imp*100 : 0;
-        const cpa  = row.purchase > 0 ? row.spend/row.purchase : 0;
-        const roas = row.spend > 0 ? row.revenue/row.spend : 0;
-        return { ...row._keys, spend:row.spend, imp:row.imp, clk:row.clk, ctr, purchase:row.purchase, revenue:row.revenue, cpa, roas };
-      });
       renderOverall(trendData, r.daily, since, until, ageData, genderData, r.age, r.gender, prevTrendData, prev, ga4Cache);
       renderGoogleAds({ daily: r.daily, campaign: r.campaign, age: r.age, gender: r.gender, location: [], adgroup: [], keyword: r.keyword }, since, until, prev);
-      renderGoogleKeyword(kw);
     }
 
     applyGads(gadsResult);
@@ -1469,8 +1458,8 @@ function renderGoogleAds(data, since, until, prev) {
     const AGE_EXCL = ['不明','Unknown','unknown'];
     const gAgeOrder2 = ['18-24','25-34','35-44','45-54','55-64','65-UP','65+','Unknown'];
 
-    const filteredAge    = (data.age    || []).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
-    const filteredGender = (data.gender || []).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+    const filteredAge    = filterByDate(data.age    || [], since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
+    const filteredGender = filterByDate(data.gender || [], since, until).filter(r=>!selectedCamp||r['廣告活動']===selectedCamp);
 
     const agg2 = (rows, dimKey) => {
       const map = {};
@@ -1571,51 +1560,6 @@ function renderGoogleAds(data, since, until, prev) {
     document.getElementById('gadsDemoFilter').addEventListener('change', e => drawGadsDemo(decodeURIComponent(e.target.value)));
     drawGadsDemo('');
   }
-}
-
-function renderGoogleKeyword(kwRows) {
-  const el = document.getElementById('tab-gkw');
-  const cols = [
-    { label:'關鍵字', key:'關鍵字' },
-    { label:'花費', key:'spend' },
-    { label:'曝光', key:'imp', fmt:'N' },
-    { label:'點擊', key:'clk', fmt:'N' },
-    { label:'CTR', key:'ctr', fmt:'P' },
-    { label:'購買', key:'purchase', fmt:'N' },
-    { label:'營收', key:'revenue', fmt:'M' },
-    { label:'CPA', key:'cpa', fmt:'M' },
-    { label:'ROAS', key:'roas', fmt:'R' },
-  ];
-  const top10 = kwRows.slice(0, 10);
-  const rest  = kwRows.slice(10);
-  const maxSpend = kwRows[0]?.spend || 1;
-
-  function rowsHTML(rows) {
-    return rows.map(r => `<tr>${cols.map(c => {
-      if (c.key === 'spend') return `<td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${Math.round(r.spend/maxSpend*60)}px"></div></div></td>`;
-      if (c.fmt === 'M') return `<td>${fmtM(r[c.key]||0)}</td>`;
-      if (c.fmt === 'N') return `<td>${fmtN(r[c.key]||0)}</td>`;
-      if (c.fmt === 'P') return `<td>${fmtP(r[c.key]||0)}</td>`;
-      if (c.fmt === 'R') return `<td class="${rc(r[c.key]||0)}">${(r[c.key]||0)?((+r[c.key]).toFixed(2)+'x'):'<span class="na">—</span>'}</td>`;
-      return `<td>${r[c.key]||'—'}</td>`;
-    }).join('')}</tr>`).join('');
-  }
-
-  el.innerHTML = `
-    <div style="padding:20px">
-      <div class="table-card">
-        <div class="table-header">
-          <h3>🔑 關鍵字成效</h3>
-          <span style="font-size:12px;color:#aaa;">${kwRows.length} 組關鍵字</span>
-        </div>
-        <div class="table-wrap" style="max-height:520px;overflow-y:auto">
-          <table>
-            <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
-            <tbody>${rowsHTML(top10)}${rest.length ? rowsHTML(rest) : ''}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>`;
 }
 
 // ── Shared table helpers ──────────────────────────────────────
