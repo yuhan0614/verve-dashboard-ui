@@ -476,7 +476,7 @@ def update_meta():
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-RENDER_GADS_API = "https://verve-api-73b2.onrender.com/api/google-ads"
+RENDER_GADS_API = "https://verve-dashboard-api.fly.dev/api/google-ads"
 
 def update_gads():
     start = (TODAY - timedelta(days=30)).strftime("%Y-%m-%d")
