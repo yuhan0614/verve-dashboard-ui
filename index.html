@@ -1664,16 +1664,21 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     });
 
   const R = 'style="text-align:right"';
-  const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>加車率</th><th ${R}>購買</th><th ${R}>購買率</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
 
   const dRow = r => {
     const dayAdRev = adRevByDate[r.date] || 0;
     const dayRevPct = parseFloat(r.totalRevenue||0) > 0 ? dayAdRev/parseFloat(r.totalRevenue)*100 : 0;
+    const sess = parseFloat(r.sessions||0);
+    const atcRate = sess > 0 ? parseFloat(r.addToCarts||0)/sess*100 : 0;
+    const purRate = sess > 0 ? parseFloat(r.conversions||0)/sess*100 : 0;
     return `<tr>
       <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
-      <td ${R}>${fmt(r.sessions)}</td><td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${fmt(r.conversions)}</td>
+      <td ${R}>${fmt(r.sessions)}</td>
+      <td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${atcRate.toFixed(1)}%</td>
+      <td ${R}>${fmt(r.conversions)}</td><td ${R}>${purRate.toFixed(2)}%</td>
       <td ${R}>${fmtR(r.totalRevenue)}</td>
       <td ${R}>${fmtR(dayAdRev)}</td>
       <td ${R}>${dayRevPct.toFixed(1)}%</td>
