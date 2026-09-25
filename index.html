@@ -647,6 +647,50 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(x.cpa)}</td>
               </tr>`).join('')}</tbody>`;
           }).join('')}
+          ${(() => {
+            const ct = sorted.reduce((a,r) => ({
+              spend:a.spend+(r.spend||0), impressions:a.impressions+(r.impressions||0),
+              link_clicks:a.link_clicks+(r.link_clicks||0), add_to_cart:a.add_to_cart+(r.add_to_cart||0),
+              purchase:a.purchase+(r.purchase||0), purchase_value:a.purchase_value+(r.purchase_value||0),
+            }), {spend:0,impressions:0,link_clicks:0,add_to_cart:0,purchase:0,purchase_value:0});
+            ct.ctr  = ct.impressions>0 ? ct.link_clicks/ct.impressions*100 : 0;
+            ct.cplc = ct.link_clicks>0 ? ct.spend/ct.link_clicks : 0;
+            ct.roas = ct.spend>0 ? ct.purchase_value/ct.spend : 0;
+            ct.cpa  = ct.purchase>0 ? ct.spend/ct.purchase : 0;
+            const subs = bucketByGrain(
+              (allCampDaily||[]).filter(x => x.date_start >= since && x.date_start <= until)
+                                .sort((a,b) => a.date_start > b.date_start ? 1 : -1),
+              'date_start', perfGrain,
+              ['spend','impressions','link_clicks','add_to_cart','purchase','purchase_value']
+            ).map(x => ({ ...x,
+              ctr:  x.impressions>0 ? x.link_clicks/x.impressions*100 : 0,
+              cplc: x.link_clicks>0 ? x.spend/x.link_clicks : 0,
+              roas: x.spend>0 ? x.purchase_value/x.spend : 0,
+              cpa:  x.purchase>0 ? x.spend/x.purchase : 0,
+            }));
+            return `<tbody>
+              <tr style="background:#eff6ff;font-weight:600;cursor:pointer" onclick="toggleSub('metacamp-total', this)">
+                <td><span class="tog" style="color:#888;font-size:10px;margin-right:4px">▶</span>合計</td>
+                <td>${fmtM(ct.spend)}</td><td>100%</td>
+                <td>${fmtN(ct.impressions)}</td><td>${fmtP(ct.ctr)}</td>
+                <td>${fmtN(ct.link_clicks)}</td><td>${fmtM(ct.cplc)}</td>
+                <td>${fmtN(ct.add_to_cart)}</td><td>${fmtN(ct.purchase)}</td>
+                <td>${fmtM(ct.purchase_value)}</td>
+                <td class="${rc(ct.roas)}">${ct.roas?ct.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+                <td>${fmtM(ct.cpa)}</td>
+              </tr>
+            </tbody>
+            <tbody id="metacamp-total" style="display:none">${subs.map(x => `<tr style="background:#eaf2fe">
+                <td style="padding-left:22px;color:#666;font-size:12px">${x.date_start}</td>
+                <td>${fmtM(x.spend)}</td><td></td>
+                <td>${fmtN(x.impressions)}</td><td>${fmtP(x.ctr)}</td>
+                <td>${fmtN(x.link_clicks)}</td><td>${fmtM(x.cplc)}</td>
+                <td>${fmtN(x.add_to_cart)}</td><td>${fmtN(x.purchase)}</td>
+                <td>${fmtM(x.purchase_value)}</td>
+                <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+                <td>${fmtM(x.cpa)}</td>
+              </tr>`).join('')}</tbody>`;
+          })()}
         </table>
       </div>
     </div>`;
@@ -1603,6 +1647,46 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
             </tr>`).join('')}</tbody>`;
         }).join('')}
+        ${(() => {
+          const ct = campSorted.reduce((a,r) => ({
+            spend:a.spend+(r.spend||0), imp:a.imp+(r.imp||0), clk:a.clk+(r.clk||0),
+            purchase:a.purchase+(r.purchase||0), revenue:a.revenue+(r.revenue||0),
+          }), {spend:0,imp:0,clk:0,purchase:0,revenue:0});
+          ct.ctr  = ct.imp>0 ? ct.clk/ct.imp*100 : 0;
+          ct.roas = ct.spend>0 ? ct.revenue/ct.spend : 0;
+          ct.cpa  = ct.purchase>0 ? ct.spend/ct.purchase : 0;
+          const subs = bucketByGrain(
+            filterByDate(data.campaign || [], since, until)
+              .map(x => ({ date: x['日期'],
+                           spend: parseFloat(x['花費(TWD)'])||0, imp: parseInt(x['曝光'])||0,
+                           clk: parseInt(x['點擊'])||0, purchase: parseFloat(x['購買'])||0,
+                           revenue: parseFloat(x['營收(TWD)'])||0 }))
+              .sort((a,b) => a.date > b.date ? 1 : -1),
+            'date', gaGrain, ['spend','imp','clk','purchase','revenue']
+          ).map(x => ({ ...x,
+            ctr:  x.imp>0 ? x.clk/x.imp*100 : 0,
+            roas: x.spend>0 ? x.revenue/x.spend : 0,
+            cpa:  x.purchase>0 ? x.spend/x.purchase : 0,
+          }));
+          return `<tbody>
+            <tr style="background:#f0faf4;font-weight:600;cursor:pointer" onclick="toggleSub('gadscamp-total', this)">
+              <td><span class="tog" style="color:#888;font-size:10px;margin-right:4px">▶</span>合計</td>
+              <td>${fmtM(ct.spend)}</td><td>100%</td>
+              <td>${fmtN(ct.imp)}</td><td>${fmtN(ct.clk)}</td><td>${fmtP(ct.ctr)}</td>
+              <td>${fmtN(ct.purchase)}</td><td>${fmtM(ct.revenue)}</td>
+              <td class="${rc(ct.roas)}">${ct.roas?ct.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+              <td>${ct.cpa?fmtM(ct.cpa):'<span class="na">—</span>'}</td>
+            </tr>
+          </tbody>
+          <tbody id="gadscamp-total" style="display:none">${subs.map(x => `<tr style="background:#e9f6ee">
+              <td style="padding-left:22px;color:#666;font-size:12px">${x.date}</td>
+              <td>${fmtM(x.spend)}</td><td></td>
+              <td>${fmtN(x.imp)}</td><td>${fmtN(x.clk)}</td><td>${fmtP(x.ctr)}</td>
+              <td>${fmtN(x.purchase)}</td><td>${fmtM(x.revenue)}</td>
+              <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
+              <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
+            </tr>`).join('')}</tbody>`;
+        })()}
       </table></div>
     </div>
     `;
