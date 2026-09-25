@@ -1173,8 +1173,13 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       });
     return map;
   }
-  const metaGa4Map = buildGa4Groups(META_SM);
-  const gadsGa4Map = buildGa4Groups(GOOGLE_SM);
+  const metaGa4Map  = buildGa4Groups(META_SM);
+  const gadsGa4Map  = buildGa4Groups(GOOGLE_SM);
+  const totalGa4Map = buildGa4Groups([...META_SM, ...GOOGLE_SM]);
+  const totalSubRows = buildGroupsWithKey([
+    ...metaDays.map(r=>({s:r.spend||0,i:r.impressions||0,c:r.link_clicks||0,p:r.purchase||0,rv:r.purchase_value||0,_k:groupKey(r.date_start)})),
+    ...gDays.map(r=>({s:parseFloat(r['花費(TWD)'])||0,i:parseInt(r['曝光'])||0,c:parseInt(r['點擊'])||0,p:parseFloat(r['購買'])||0,rv:parseFloat(r['營收(TWD)'])||0,_k:groupKey(r['日期'])})),
+  ], r=>r._k);
 
   // Trend: align dates, compute daily total spend + ROAS
   const metaByDate = {};
@@ -1249,13 +1254,14 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
             <td style="color:#2563eb">${gads.spend>0?(ga4GoogleRev/gads.spend).toFixed(2)+'x':'—'}</td>
           </tr>
           <tbody id="gads-sub" style="display:none">${subRowHTML(gadsSubRows,'#f0faf4',gadsGa4Map)}</tbody>
-          <tr style="background:#eff6ff;font-weight:600">
-            <td>合計</td>
+          <tr style="background:#eff6ff;font-weight:600;cursor:pointer" onclick="toggleSub('total-sub', this)">
+            <td><span class="tog" style="color:#888;font-size:10px;margin-right:4px">▶</span>合計</td>
             <td>${fmtM(total.spend)}</td><td>${fmtN(total.imp)}</td><td>${fmtN(total.clk)}</td>
             <td>${fmtP(total.imp>0?total.clk/total.imp*100:0)}</td><td>${fmtN(total.purchase,0)}</td><td>${fmtM(total.revenue)}</td>
             <td class="${rc(total.roas)}">${total.roas.toFixed(2)}x</td><td>${fmtM(total.cpa)}</td>
             <td style="color:#2563eb">${fmtM(ga4Rev)}</td><td style="color:#2563eb">${ga4Roas.toFixed(2)}x</td>
           </tr>
+          <tbody id="total-sub" style="display:none">${subRowHTML(totalSubRows,'#eaf2fe',totalGa4Map)}</tbody>
         </tbody>
       </table></div>
     </div>`;
