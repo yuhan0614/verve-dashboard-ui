@@ -2116,7 +2116,38 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
 }
 
 let sholineTrendChart = null;
+let slGrain = 'day';
+let _slArgs = null;
+function setSlGrain(g) {
+  slGrain = g;
+  if (_slArgs) renderSholine.apply(null, _slArgs);
+}
+function slBucket(rows, grain) {
+  if (grain === 'day') return rows;
+  const pad = n => String(n).padStart(2,'0');
+  const keyOf = d => {
+    const t = new Date(d + 'T00:00:00');
+    if (grain === 'month') return { k: d.slice(0,7), label: d.slice(0,7) };
+    const mon = new Date(t);
+    mon.setDate(t.getDate() - ((t.getDay() + 6) % 7));
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const k = `${mon.getFullYear()}-${pad(mon.getMonth()+1)}-${pad(mon.getDate())}`;
+    return { k, label: `${pad(mon.getMonth()+1)}/${pad(mon.getDate())}–${pad(sun.getMonth()+1)}/${pad(sun.getDate())}` };
+  };
+  const map = {};
+  for (const r of rows) {
+    const { k, label } = keyOf(r.date);
+    if (!map[k]) map[k] = { date: label, _k: k, gmv:0, revenue:0, orders:0, returns:0, cancelled:0, sessions:0, adSpend:0, adRev:0 };
+    const g = map[k];
+    for (const f of ['gmv','revenue','orders','returns','cancelled','sessions','adSpend','adRev']) g[f] += r[f] || 0;
+  }
+  return Object.values(map).sort((a,b) => a._k > b._k ? 1 : -1).map(g => ({
+    ...g, siteRoas: g.adSpend > 0 ? g.revenue/g.adSpend : 0,
+  }));
+}
 function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendData, slItemsCache, slDiscCache, ga4Items) {
+  _slArgs = [json, since, until, trendData, gDaily, prev, prevTrendData, slItemsCache, slDiscCache, ga4Items];
   const mapEntries = (s, u) => Object.entries(json)
     .filter(([d]) => d >= s && d <= u)
     .map(([d, v]) => ({ date:d, gmv:v.gmv||0, revenue:v.revenue||0, orders:v.orders||0, returns:v.returns||0, cancelled:v.cancelled||0, sessions:v.sessions||0, cvr:v.cvr||0, aov:v.aov||0 }))
@@ -2141,6 +2172,12 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
     r.adRev    = (metaMap[r.date]?.rev||0)   + (gMap[r.date]?.rev||0);
     r.siteRoas = r.adSpend > 0 ? r.revenue/r.adSpend : 0;
   });
+
+  const bucketed = slBucket(filtered, slGrain);
+  const grainLabel = slGrain === 'day' ? '每日' : slGrain === 'week' ? '每週' : '每月';
+  const grainBtns = `<div style="display:flex;gap:4px">` + [['day','日'],['week','週'],['month','月']]
+    .map(([g,l]) => `<button class="preset-btn${slGrain===g?' active':''}" style="padding:3px 13px;font-size:11px" onclick="setSlGrain('${g}')">${l}</button>`)
+    .join('') + `</div>`;
 
   const total = filtered.reduce((a,r) => ({
     gmv: a.gmv+r.gmv, revenue: a.revenue+r.revenue, orders: a.orders+r.orders,
@@ -2172,16 +2209,19 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
       <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas?siteRoas.toFixed(2)+'x':'—'}</div><div class="sub">${diffBadge(siteRoas,prevSiteRoas)}</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
-      <h3>📅 每日趨勢</h3>
-      <div style="position:relative;height:280px"><canvas id="sholineTrendChart"></canvas></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">📅 ${grainLabel}趨勢</h3>
+        ${grainBtns}
+      </div>
+      <div style="position:relative;height:280px;margin-top:10px"><canvas id="sholineTrendChart"></canvas></div>
     </div>
     <div class="table-card">
-      <div class="table-header"><h3>📋 每日明細</h3></div>
+      <div class="table-header"><h3>📋 ${grainLabel}明細</h3>${grainBtns}</div>
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>日期</th><th>成交額</th><th>總營業額</th><th>總訂單量</th><th>平均客單價</th><th>退貨取消佔比</th><th style="color:#8B5E3C">廣告花費</th><th style="color:#8B5E3C">全站ROAS</th>
+          <th>${grainLabel === '每日' ? '日期' : grainLabel === '每週' ? '週別' : '月份'}</th><th>成交額</th><th>總營業額</th><th>總訂單量</th><th>平均客單價</th><th>退貨取消佔比</th><th style="color:#8B5E3C">廣告花費</th><th style="color:#8B5E3C">全站ROAS</th>
         </tr></thead>
-        <tbody>${filtered.map(r => {
+        <tbody>${bucketed.map(r => {
           const aov = r.orders > 0 ? r.gmv/r.orders : 0;
           const pct = r.gmv > 0 ? ((r.returns+r.cancelled)/r.gmv*100).toFixed(1)+'%' : '—';
           return `<tr>
@@ -2339,10 +2379,10 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
 
   if (sholineTrendChart) sholineTrendChart.destroy();
   sholineTrendChart = new Chart(document.getElementById('sholineTrendChart'), {
-    data: { labels: filtered.map(r=>r.date), datasets: [
-      { type:'bar',  label:'成交額',   data: filtered.map(r=>r.revenue), backgroundColor:'rgba(100,210,230,0.6)', borderColor:'#38bcd8', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
-      { type:'bar',  label:'廣告營收', data: filtered.map(r=>r.adRev),   backgroundColor:'rgba(110,130,220,0.55)', borderColor:'#6b7fd6', borderWidth:1, borderRadius:3, yAxisID:'y', order:3 },
-      { type:'line', label:'全站ROAS', data: filtered.map(r=>r.siteRoas), borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
+    data: { labels: bucketed.map(r=>r.date), datasets: [
+      { type:'bar',  label:'成交額',   data: bucketed.map(r=>r.revenue), backgroundColor:'rgba(100,210,230,0.6)', borderColor:'#38bcd8', borderWidth:1, borderRadius:3, yAxisID:'y', order:2 },
+      { type:'bar',  label:'廣告營收', data: bucketed.map(r=>r.adRev),   backgroundColor:'rgba(110,130,220,0.55)', borderColor:'#6b7fd6', borderWidth:1, borderRadius:3, yAxisID:'y', order:3 },
+      { type:'line', label:'全站ROAS', data: bucketed.map(r=>r.siteRoas), borderColor:'#e8833a', backgroundColor:'transparent', borderWidth:2.5, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
     ]},
     options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
       plugins:{ legend:{position:'top',labels:{font:{size:11},boxWidth:12,padding:12}} },
