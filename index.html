@@ -1621,7 +1621,53 @@ function scrollTable(rows, rowFn, hd) {
 // ── GA4 ──────────────────────────────────────────────────────
 let ga4TrendChart = null;
 let ga4ChGroupChart = null;
+let ga4Grain = 'day';
+let _ga4Args = null;
+function setGa4Grain(g) {
+  ga4Grain = g;
+  if (_ga4Args) renderGA4.apply(null, _ga4Args);
+}
+function ga4GrainKey(ymd, grain) {
+  const pad = n => String(n).padStart(2,'0');
+  if (grain === 'day')   return { k: ymd, label: ymd.slice(4,6)+'/'+ymd.slice(6,8) };
+  if (grain === 'month') return { k: ymd.slice(0,6), label: ymd.slice(0,4)+'-'+ymd.slice(4,6) };
+  const t = new Date(+ymd.slice(0,4), +ymd.slice(4,6)-1, +ymd.slice(6,8));
+  const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay()+6)%7));
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  return {
+    k: `${mon.getFullYear()}${pad(mon.getMonth()+1)}${pad(mon.getDate())}`,
+    label: `${pad(mon.getMonth()+1)}/${pad(mon.getDate())}–${pad(sun.getMonth()+1)}/${pad(sun.getDate())}`,
+  };
+}
+function ga4BucketDaily(rows, grain) {
+  if (grain === 'day') return rows;
+  const map = {};
+  for (const r of rows) {
+    const { k, label } = ga4GrainKey(r.date, grain);
+    if (!map[k]) map[k] = { date:k, _label:label, sessions:0, addToCarts:0, conversions:0, totalRevenue:0, _dur:0, _bounce:0 };
+    const g = map[k], s = parseFloat(r.sessions||0);
+    g.sessions += s;
+    g.addToCarts   += parseFloat(r.addToCarts||0);
+    g.conversions  += parseFloat(r.conversions||0);
+    g.totalRevenue += parseFloat(r.totalRevenue||0);
+    g._dur    += parseFloat(r.averageSessionDuration||0) * s;
+    g._bounce += parseFloat(r.bounceRate||0) * s;
+  }
+  return Object.values(map).sort((a,b)=>a.date.localeCompare(b.date)).map(g => ({
+    ...g,
+    averageSessionDuration: g.sessions ? g._dur/g.sessions : 0,
+    bounceRate:             g.sessions ? g._bounce/g.sessions : 0,
+  }));
+}
+function ga4GrainBtns(grain) {
+  return `<div style="display:flex;gap:4px">` + [['day','日'],['week','週'],['month','月']]
+    .map(([g,l]) => `<button class="preset-btn${grain===g?' active':''}" style="padding:3px 13px;font-size:11px" onclick="setGa4Grain('${g}')">${l}</button>`)
+    .join('') + `</div>`;
+}
 function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) {
+  _ga4Args = [cache, since, until, trendData, gDaily, prev, prevTrendData];
+  const gLabel = ga4Grain === 'day' ? '每日' : ga4Grain === 'week' ? '每週' : '每月';
+  const gBtns  = ga4GrainBtns(ga4Grain);
   const fmt  = n => Number(n||0).toLocaleString('en');
   const fmtR = n => 'NT$' + Math.round(n||0).toLocaleString('en');
   const fmtS = s => { const v=parseFloat(s||0); const m=Math.floor(v/60); return `${m}:${String(Math.round(v%60)).padStart(2,'0')}`; };
@@ -1636,7 +1682,8 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const dailyAsc = (cache.daily||[])
     .filter(r => r.date >= sinceD && r.date <= untilD)
     .sort((a,b) => a.date.localeCompare(b.date));
-  const daily = [...dailyAsc].reverse();
+  const dailyAscB = ga4BucketDaily(dailyAsc, ga4Grain);
+  const daily = [...dailyAscB].reverse();
 
   // Channels: aggregate daily_channels filtered by date range
   const chMap = {};
@@ -1705,18 +1752,18 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     });
 
   const R = 'style="text-align:right"';
-  const thead = `<tr><th>日期</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>加車率</th><th ${R}>購買</th><th ${R}>購買率</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const thead = `<tr><th>${ga4Grain==='day'?'日期':ga4Grain==='week'?'週別':'月份'}</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>加車率</th><th ${R}>購買</th><th ${R}>購買率</th><th ${R}>全站營收</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
 
   const dRow = r => {
-    const dayAdRev = adRevByDate[r.date] || 0;
+    const dayAdRev = adRevByGrain[r.date] || 0;
     const dayRevPct = parseFloat(r.totalRevenue||0) > 0 ? dayAdRev/parseFloat(r.totalRevenue)*100 : 0;
     const sess = parseFloat(r.sessions||0);
     const atcRate = sess > 0 ? parseFloat(r.addToCarts||0)/sess*100 : 0;
     const purRate = sess > 0 ? parseFloat(r.conversions||0)/sess*100 : 0;
     return `<tr>
-      <td>${r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
+      <td>${r._label || r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
       <td ${R}>${fmt(r.sessions)}</td>
       <td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${atcRate.toFixed(1)}%</td>
       <td ${R}>${fmt(r.conversions)}</td><td ${R}>${purRate.toFixed(2)}%</td>
@@ -1755,6 +1802,11 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   (cache.daily_source_medium||[])
     .filter(r => r.date >= sinceD && r.date <= untilD && AD_SOURCES.includes((r.sessionSourceMedium||'').toLowerCase()))
     .forEach(r => { adRevByDate[r.date] = (adRevByDate[r.date]||0) + parseFloat(r.totalRevenue||0); });
+  const adRevByGrain = {};
+  Object.entries(adRevByDate).forEach(([d,v]) => {
+    const k = ga4GrainKey(d, ga4Grain).k;
+    adRevByGrain[k] = (adRevByGrain[k]||0) + v;
+  });
   const totalAdRev = Object.values(adRevByDate).reduce((s,v)=>s+v, 0);
   const adRevPct = totalRev > 0 ? totalAdRev/totalRev*100 : 0;
 
@@ -1771,11 +1823,22 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const gSpendMap = {};
   (gDaily||[]).forEach(r => { if (r['日期']) gSpendMap[r['日期']] = (gSpendMap[r['日期']]||0)+(parseFloat(r['花費(TWD)'])||0); });
 
-  const chartRows = dailyAsc.map(r => {
+  const chartDayRows = dailyAsc.map(r => {
     const d = r.date.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3');
     const adSpend = (metaSpendMap[d]||0) + (gSpendMap[d]||0);
-    return { d, sessions: parseFloat(r.sessions||0), revenue: parseFloat(r.totalRevenue||0), siteRoas: adSpend > 0 ? parseFloat(r.totalRevenue||0)/adSpend : 0, adSpend };
+    return { _k: r.date, d, sessions: parseFloat(r.sessions||0), revenue: parseFloat(r.totalRevenue||0), siteRoas: adSpend > 0 ? parseFloat(r.totalRevenue||0)/adSpend : 0, adSpend };
   });
+  const chartRows = (() => {
+    if (ga4Grain === 'day') return chartDayRows;
+    const map = {};
+    for (const r of chartDayRows) {
+      const { k, label } = ga4GrainKey(r._k, ga4Grain);
+      if (!map[k]) map[k] = { _k:k, d:label, sessions:0, revenue:0, adSpend:0 };
+      map[k].sessions += r.sessions; map[k].revenue += r.revenue; map[k].adSpend += r.adSpend;
+    }
+    return Object.values(map).sort((a,b)=>a._k.localeCompare(b._k))
+      .map(g => ({ ...g, siteRoas: g.adSpend > 0 ? g.revenue/g.adSpend : 0 }));
+  })();
   const totalAdSpend = chartRows.reduce((s,r)=>s+r.adSpend, 0);
   const siteRoas = totalAdSpend > 0 ? totalRev/totalAdSpend : 0;
 
@@ -1854,13 +1917,18 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       <div class="sc c-orange"><div class="lbl">廣告營收佔比</div><div class="val">${adRevPct.toFixed(1)}%</div><div class="sub">${diffBadge(adRevPct,prevAdRevPct)}</div></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
-      <h3>📅 每日趨勢</h3>
-      <div style="position:relative;height:260px"><canvas id="ga4TrendChart"></canvas></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h3 style="margin:0">📅 ${gLabel}趨勢</h3>
+        ${gBtns}
+      </div>
+      <div style="position:relative;height:260px;margin-top:10px"><canvas id="ga4TrendChart"></canvas></div>
     </div>
     <div class="chart-card" style="margin-bottom:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <h3 style="margin:0">📡 每日流量來源分佈</h3>
-        <div style="display:flex;gap:6px">
+        <h3 style="margin:0">📡 ${gLabel}流量來源分佈</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${gBtns}
+          <span style="width:10px"></span>
           <button onclick="switchChGroup('rev')" id="chGroupBtn_rev" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#10b981;color:#fff;font-size:12px;cursor:pointer;font-weight:600">營收</button>
           <button onclick="switchChGroup('sess')" id="chGroupBtn_sess" style="padding:4px 14px;border-radius:20px;border:1px solid #d9d9d9;background:#fff;color:#555;font-size:12px;cursor:pointer">流量</button>
         </div>
@@ -1877,7 +1945,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
       </div>
     </div>
     <div class="table-card">
-      <div class="table-header"><h3>📅 每日明細</h3><span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div>
+      <div class="table-header"><h3>📅 ${gLabel}明細</h3><div style="display:flex;gap:10px;align-items:center">${gBtns}<span style="font-size:11px;color:#aaa">資料更新至 ${cache.updated||''}</span></div></div>
       ${scrollTable(daily, dRow, thead)}
     </div>
     <div style="display:flex;gap:14px;margin-top:14px;align-items:flex-start;flex-wrap:wrap">
@@ -1992,9 +2060,11 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   }
 
   const smRows = (cache.daily_source_medium||[]).filter(r => r.date >= sinceD && r.date <= untilD);
-  const chDateMap = {};
+  const chDateMap = {}, chLabelMap = {};
   smRows.forEach(r => {
-    const d = r.date;
+    const gk = ga4GrainKey(r.date, ga4Grain);
+    const d = gk.k;
+    chLabelMap[d] = gk.label;
     const g = classifySourceMedium(r.sessionSourceMedium);
     if (!chDateMap[d]) chDateMap[d] = {};
     if (!chDateMap[d][g]) chDateMap[d][g] = {rev:0, sess:0};
@@ -2027,7 +2097,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   }
 
   const chSortedDates = Object.keys(chDateMap).sort();
-  const chLabels = chSortedDates.map(d => d.slice(4,6)+'/'+d.slice(6,8));
+  const chLabels = chSortedDates.map(d => chLabelMap[d] || d);
 
   const _chDatasets = (key) => CH_GROUPS.map((g,i) => ({
     type: 'bar', label: g,
