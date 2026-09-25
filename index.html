@@ -140,7 +140,7 @@
 
 <div class="controls">
   <div class="preset-btns">
-    <button class="preset-btn" onclick="applyPreset(1)">今天</button>
+    <button class="preset-btn" onclick="applyPresetToday()">今天</button>
     <button class="preset-btn" onclick="applyPresetYesterday()">昨天</button>
     <button class="preset-btn active" onclick="applyPreset(7)">近7天</button>
     <button class="preset-btn" onclick="applyPreset(30)">近30天</button>
@@ -255,10 +255,19 @@ function clearPreset() {
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
 }
 function applyPreset(days) {
-  const to = new Date(), from = new Date();
+  const to = new Date();
+  to.setDate(to.getDate() - 1);
+  const from = new Date(to);
   from.setDate(to.getDate() - days + 1);
   document.getElementById('dateFrom').value = toYMD(from);
   document.getElementById('dateTo').value = toYMD(to);
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+function applyPresetToday() {
+  const d = new Date();
+  document.getElementById('dateFrom').value = toYMD(d);
+  document.getElementById('dateTo').value = toYMD(d);
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
 }
@@ -278,7 +287,9 @@ function applyPresetMonth() {
   event.target.classList.add('active');
 }
 (function() {
-  const to = new Date(), from = new Date();
+  const to = new Date();
+  to.setDate(to.getDate() - 1);
+  const from = new Date(to);
   from.setDate(to.getDate() - 6);
   document.getElementById('dateFrom').value = toYMD(from);
   document.getElementById('dateTo').value = toYMD(to);
