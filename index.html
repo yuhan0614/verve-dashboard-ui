@@ -304,6 +304,28 @@ function switchTab(name) {
 }
 
 // ── Fetch ─────────────────────────────────────────────────
+function mergeMetaLive(base, live) {
+  if (!live || live.error) return base;
+  const keyFns = {
+    daily:     r => r.date_start,
+    campaigns: r => `${r.date_start}|${r.campaign_id}`,
+    ads:       r => `${r.date_start}|${r.ad_id}`,
+    age:       r => `${r.date_start}|${r.campaign_id}|${r.age||''}`,
+    gender:    r => `${r.date_start}|${r.campaign_id}|${r.gender||''}`,
+  };
+  const out = { ...base };
+  for (const [k, kf] of Object.entries(keyFns)) {
+    if (!live[k]) continue;
+    const m = {};
+    (base[k] || []).forEach(r => { m[kf(r)] = r; });
+    live[k].forEach(r => { m[kf(r)] = r; });
+    out[k] = Object.values(m);
+  }
+  if (live.ad_urls) out.ad_urls = { ...(base.ad_urls || {}), ...live.ad_urls };
+  if (live.updated) out.updated = live.updated;
+  return out;
+}
+
 async function fetchData(forceRefresh = false) {
   if (forceRefresh) _cache = {};
   const since = document.getElementById('dateFrom').value;
@@ -338,9 +360,17 @@ async function fetchData(forceRefresh = false) {
 
   try {
     // 預設讀靜態快取（快、不怕 Render cold start）；forceRefresh 才打後端
-    const metaUrl = forceRefresh ? META_API : './meta_cache.json';
-    if (forceRefresh) delete _cache[metaUrl];
+    const metaUrl = './meta_cache.json';
     const safeParse = (txt, fallback) => { try { return JSON.parse(txt); } catch { return fallback; } };
+    // 歷史資料靜態快取已涵蓋，按「更新資料」只即時補最近幾天
+    const LIVE_DAYS = 3;
+    const _lt = new Date(), _lf = new Date();
+    _lf.setDate(_lt.getDate() - (LIVE_DAYS - 1));
+    const liveSince = toYMD(_lf), liveUntil = toYMD(_lt);
+    const metaLivePromise = (forceRefresh && until >= liveSince)
+      ? fetch(`${META_API}?since=${liveSince}&until=${liveUntil}`)
+          .then(r => r.ok ? r.json() : null).catch(() => null)
+      : Promise.resolve(null);
     const gadsStaticUrl = `./gads_cache.json?t=${Date.now()}`;
     const gadsBgPromise = forceRefresh
       ? fetch(`${GADS_API}?since=${since}&until=${until}`).then(r => r.json()).catch(() => null)
@@ -348,7 +378,7 @@ async function fetchData(forceRefresh = false) {
     const [metaResult, gadsResult, sholineTxt,
            ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
       (forceRefresh
-        ? fetch(metaUrl).then(r => r.ok ? r.text() : Promise.reject()).catch(() => fetch('./meta_cache.json').then(r=>r.text()))
+        ? fetch(`${metaUrl}?t=${Date.now()}`).then(r=>r.text())
         : cachedFetch(metaUrl)
       ).catch(() => '{}'),
       fetch(gadsStaticUrl).then(r=>r.json()).catch(() => ({data:[]})),
@@ -357,7 +387,7 @@ async function fetchData(forceRefresh = false) {
       cachedFetch('./ga4_channels.json').catch(() => '[]'),
       cachedFetch('./ga4_source_medium.json').catch(() => '[]'),
     ]);
-    const metaCache = safeParse(metaResult, {});
+    const metaCache = mergeMetaLive(safeParse(metaResult, {}), await metaLivePromise);
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
     const campData      = metaAgg(metaCache.campaigns || [], since, until, ['campaign_id','campaign_name']);
