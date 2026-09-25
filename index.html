@@ -210,7 +210,46 @@
 <script>
 const ACCOUNT_ID = '1417409513448597';
 let trendChart, pieChart;
+let perfGrain = 'day';
+let _perfArgs = null;
+function setPerfGrain(g) { perfGrain = g; if (_perfArgs) renderPerf.apply(null, _perfArgs); }
+function dayGrainKey(d, grain) {
+  if (grain === 'day')   return { k: d, label: d };
+  if (grain === 'month') return { k: d.slice(0,7), label: d.slice(0,7) };
+  const pad = n => String(n).padStart(2,'0');
+  const t = new Date(d + 'T00:00:00');
+  const mon = new Date(t); mon.setDate(t.getDate() - ((t.getDay()+6)%7));
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  return { k: toYMD(mon), label: `${pad(mon.getMonth()+1)}/${pad(mon.getDate())}–${pad(sun.getMonth()+1)}/${pad(sun.getDate())}` };
+}
+function grainBtnsFor(fnName, cur) {
+  return `<div style="display:flex;gap:4px">` + [['day','日'],['week','週'],['month','月']]
+    .map(([g,l]) => `<button class="preset-btn${cur===g?' active':''}" style="padding:3px 13px;font-size:11px" onclick="${fnName}('${g}')">${l}</button>`)
+    .join('') + `</div>`;
+}
+function bucketByGrain(rows, dateField, grain, sumFields) {
+  if (grain === 'day') return rows;
+  const map = {};
+  for (const r of rows) {
+    const { k, label } = dayGrainKey(r[dateField], grain);
+    if (!map[k]) { map[k] = { ...r, [dateField]: label, _k: k }; sumFields.forEach(f => map[k][f] = 0); }
+    sumFields.forEach(f => { map[k][f] += parseFloat(r[f]) || 0; });
+  }
+  return Object.values(map).sort((a,b) => a._k < b._k ? -1 : 1);
+}
+
 let overallSpendChart = null, overallPieChart = null;
+let ovGrain = null;
+let _ovArgs = null;
+function setOvGrain(g) {
+  ovGrain = g;
+  if (_ovArgs) renderOverall.apply(null, _ovArgs);
+}
+function ovGrainBtns(cur) {
+  return `<div style="display:flex;gap:4px">` + [['day','日'],['week','週'],['month','月']]
+    .map(([g,l]) => `<button class="preset-btn${cur===g?' active':''}" style="padding:3px 13px;font-size:11px" onclick="setOvGrain('${g}')">${l}</button>`)
+    .join('') + `</div>`;
+}
 let allAdData = [];
 let allAssetData = [];
 let adUrlMap = {};
@@ -500,6 +539,9 @@ function calcPrevDates(since, until) {
 
 // ── Perf Tab ──────────────────────────────────────────────
 function renderPerf(camps, trend, since, until, prevTrendData) {
+  _perfArgs = [camps, trend, since, until, prevTrendData];
+  const pfLabel = perfGrain === 'day' ? '每日' : perfGrain === 'week' ? '每週' : '每月';
+  const pfBtns  = grainBtnsFor('setPerfGrain', perfGrain);
   // 用 daily trendData 算當期合計（已篩 since/until），跟 prevTrendData 才能做同口徑比較
   const sumRows = rows => rows.reduce((a,r) => ({
     spend: a.spend+(r.spend||0), impressions: a.impressions+(r.impressions||0),
@@ -529,8 +571,11 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
     </div>
     <div class="charts-row">
       <div class="chart-card">
-        <h3>📅 每日趨勢</h3>
-        <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">📅 ${pfLabel}趨勢</h3>
+          ${pfBtns}
+        </div>
+        <div style="display:flex;gap:16px;margin:8px 0;font-size:11px;">
           <span><span style="display:inline-block;width:12px;height:3px;background:#52c41a;border-radius:2px;vertical-align:middle;margin-right:4px"></span>花費</span>
           <span><span style="display:inline-block;width:12px;height:3px;background:#1877f2;border-radius:2px;vertical-align:middle;margin-right:4px"></span>ROAS</span>
           <span><span style="display:inline-block;width:12px;height:3px;background:#fa8c16;border-radius:2px;vertical-align:middle;margin-right:4px"></span>購買</span>
@@ -575,7 +620,10 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
   // charts
   if (trendChart) trendChart.destroy();
   if (pieChart) pieChart.destroy();
-  const filteredTrend = trend.filter(r => r.date_start >= since && r.date_start <= until);
+  const filteredTrendDay = trend.filter(r => r.date_start >= since && r.date_start <= until);
+  const filteredTrend = bucketByGrain(filteredTrendDay, 'date_start', perfGrain,
+    ['spend','impressions','link_clicks','clicks','add_to_cart','purchase','purchase_value'])
+    .map(r => ({ ...r, roas: r.spend > 0 ? r.purchase_value/r.spend : 0 }));
   const tDates = filteredTrend.map(r=>r.date_start);
   trendChart = new Chart(document.getElementById('trendChart'), {
     data: { labels: tDates, datasets: [
@@ -953,6 +1001,7 @@ function gadsTable(rows, cols) {
 // ── 媒體總成效 Tab ─────────────────────────────────────────
 let overallAgePie=null,overallAgeBar=null,overallGenderPie=null,overallGenderBar=null;
 function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender, prevTrendData, prev, ga4Cache) {
+  _ovArgs = [trendData, gDaily, since, until, metaAgeData, metaGenderData, gAge, gGender, prevTrendData, prev, ga4Cache];
   const el = document.getElementById('tab-overall');
 
   // Meta daily totals
@@ -979,7 +1028,9 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
 
   // Sub-row grouping
   const daysDiff = (new Date(until) - new Date(since)) / 86400000 + 1;
-  const groupBy = daysDiff <= 31 ? 'day' : daysDiff <= 90 ? 'week' : 'month';
+  const groupBy = ovGrain || (daysDiff <= 31 ? 'day' : daysDiff <= 90 ? 'week' : 'month');
+  const ovLabel = groupBy === 'day' ? '每日' : groupBy === 'week' ? '每週' : '每月';
+  const ovBtns  = ovGrainBtns(groupBy);
   function wkStart(s) {
     const d = new Date(s), day = d.getDay(), diff = day===0?-6:1-day;
     d.setDate(d.getDate()+diff); return toYMD(d);
@@ -1097,12 +1148,21 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
   const gByDate = {};
   gDays.forEach(r => { gByDate[r['日期']] = { spend: parseFloat(r['花費(TWD)'])||0, revenue: parseFloat(r['營收(TWD)'])||0 }; });
   const allDates = [...new Set([...Object.keys(metaByDate), ...Object.keys(gByDate)])].sort();
-  const dailyMetaSpend = allDates.map(d => metaByDate[d]?.spend||0);
-  const dailyGadsSpend = allDates.map(d => gByDate[d]?.spend||0);
-  const dailyRoas  = allDates.map(d => {
-    const s = (metaByDate[d]?.spend||0) + (gByDate[d]?.spend||0);
-    const rv = (metaByDate[d]?.revenue||0) + (gByDate[d]?.revenue||0);
-    return s > 0 ? rv/s : 0;
+  const trendMap = {};
+  allDates.forEach(d => {
+    const k = groupKey(d);
+    if (!trendMap[k]) trendMap[k] = { ms:0, gs:0, rv:0 };
+    trendMap[k].ms += metaByDate[d]?.spend||0;
+    trendMap[k].gs += gByDate[d]?.spend||0;
+    trendMap[k].rv += (metaByDate[d]?.revenue||0) + (gByDate[d]?.revenue||0);
+  });
+  const trendKeys = Object.keys(trendMap).sort();
+  const trendLabels = trendKeys.map(groupLabel);
+  const dailyMetaSpend = trendKeys.map(k => trendMap[k].ms);
+  const dailyGadsSpend = trendKeys.map(k => trendMap[k].gs);
+  const dailyRoas = trendKeys.map(k => {
+    const s = trendMap[k].ms + trendMap[k].gs;
+    return s > 0 ? trendMap[k].rv/s : 0;
   });
 
   el.innerHTML = `
@@ -1117,7 +1177,10 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
     </div>
     <div class="charts-row">
       <div class="chart-card">
-        <h3>📅 每日花費趨勢（Meta vs Google）</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">📅 ${ovLabel}花費趨勢（Meta vs Google）</h3>
+          ${ovBtns}
+        </div>
         <div style="position:relative;height:260px"><canvas id="overallSpendChart"></canvas></div>
       </div>
       <div class="chart-card">
@@ -1126,7 +1189,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
       </div>
     </div>
     <div class="table-card">
-      <div class="table-header"><h3>📊 媒體比較</h3></div>
+      <div class="table-header"><h3>📊 媒體比較</h3>${ovBtns}</div>
       <div class="table-wrap"><table>
         <thead><tr>
           <th>媒體</th><th>花費</th><th>曝光</th><th>點擊</th><th>CTR</th>
@@ -1202,7 +1265,7 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
 
   if (overallSpendChart) overallSpendChart.destroy();
   overallSpendChart = new Chart(document.getElementById('overallSpendChart'), {
-    data: { labels: allDates, datasets: [
+    data: { labels: trendLabels, datasets: [
       { type:'bar',  label:'Meta', data: dailyMetaSpend, backgroundColor:'rgba(24,119,242,0.5)', borderColor:'#1877f2', borderWidth:1, yAxisID:'y', order:2, stack:'spend' },
       { type:'bar',  label:'Google', data: dailyGadsSpend, backgroundColor:'rgba(52,168,83,0.5)', borderColor:'#34a853', borderWidth:1, yAxisID:'y', order:2, stack:'spend' },
       { type:'line', label:'ROAS', data: dailyRoas,  borderColor:'#f5a623', borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'y2', order:1 },
@@ -1326,8 +1389,14 @@ function renderOverall(trendData, gDaily, since, until, metaAgeData, metaGenderD
 }
 
 let gadsTrendChart = null, gadsPieChart = null;
+let gaGrain = 'day';
+let _gaArgs = null;
+function setGaGrain(g) { gaGrain = g; if (_gaArgs) renderGoogleAds.apply(null, _gaArgs); }
 
 function renderGoogleAds(data, since, until, prev) {
+  _gaArgs = [data, since, until, prev];
+  const gaLabel = gaGrain === 'day' ? '每日' : gaGrain === 'week' ? '每週' : '每月';
+  const gaBtns  = grainBtnsFor('setGaGrain', gaGrain);
   gadsData = data;
   const el = document.getElementById('tab-gads');
 
@@ -1370,7 +1439,7 @@ function renderGoogleAds(data, since, until, prev) {
   ];
 
   // 每日 rows for trend chart
-  const dailyRows = daily.map(r => {
+  const dailyRows = bucketByGrain(daily.map(r => {
     const spend   = parseFloat(r['花費(TWD)'])||0;
     const revenue = parseFloat(r['營收(TWD)'])||0;
     const clk     = parseInt(r['點擊'])||0;
@@ -1383,7 +1452,13 @@ function renderGoogleAds(data, since, until, prev) {
       cpa:  purchase > 0 ? spend/purchase : 0,
       roas: spend > 0 ? revenue/spend : 0,
     };
-  }).sort((a,b) => a.date > b.date ? 1 : -1);
+  }).sort((a,b) => a.date > b.date ? 1 : -1), 'date', gaGrain, ['spend','imp','clk','purchase','revenue'])
+    .map(r => ({ ...r,
+      ctr:  r.imp > 0 ? r.clk/r.imp*100 : 0,
+      cpc:  r.clk > 0 ? r.spend/r.clk : 0,
+      cpa:  r.purchase > 0 ? r.spend/r.purchase : 0,
+      roas: r.spend > 0 ? r.revenue/r.spend : 0,
+    }));
 
   // 總計
   const total = dailyRows.reduce((a,r) => ({
@@ -1424,7 +1499,10 @@ function renderGoogleAds(data, since, until, prev) {
     </div>
     <div class="charts-row">
       <div class="chart-card">
-        <h3>📅 每日趨勢</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h3 style="margin:0">📅 ${gaLabel}趨勢</h3>
+          ${gaBtns}
+        </div>
         <div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px;">
           <span><span style="display:inline-block;width:12px;height:3px;background:#4285f4;border-radius:2px;vertical-align:middle;margin-right:4px"></span>花費</span>
           <span><span style="display:inline-block;width:12px;height:3px;background:#e8833a;border-radius:2px;vertical-align:middle;margin-right:4px"></span>ROAS</span>
