@@ -374,6 +374,17 @@ function mergeMetaLive(base, live) {
   return out;
 }
 
+// 先讀精簡的近期檔；選到更早的區間才自動改抓完整歷史檔
+async function loadGa4File(name, sinceD) {
+  const parse = t => { try { return JSON.parse(t); } catch { return []; } };
+  const full = () => cachedFetch(`./${name}.json`).then(parse).catch(() => []);
+  const recent = await cachedFetch(`./${name}_recent.json`).then(parse).catch(() => null);
+  if (!recent || !recent.length) return full();
+  let minD = '99999999';
+  for (const r of recent) { const d = String(r.date); if (d < minD) minD = d; }
+  return sinceD >= minD ? recent : full();
+}
+
 async function fetchData(forceRefresh = false) {
   if (forceRefresh) _cache = {};
   const since = document.getElementById('dateFrom').value;
@@ -431,9 +442,9 @@ async function fetchData(forceRefresh = false) {
       ).catch(() => '{}'),
       fetch(gadsStaticUrl).then(r=>r.json()).catch(() => ({data:[]})),
       cachedFetch(SHOLINE_JSON).catch(() => '{}'),
-      cachedFetch('./ga4_daily.json').catch(() => '[]'),
-      cachedFetch('./ga4_channels.json').catch(() => '[]'),
-      cachedFetch('./ga4_source_medium.json').catch(() => '[]'),
+      loadGa4File('ga4_daily', since.replace(/-/g,'')),
+      loadGa4File('ga4_channels', since.replace(/-/g,'')),
+      loadGa4File('ga4_source_medium', since.replace(/-/g,'')),
     ]);
     const metaCache = mergeMetaLive(safeParse(metaResult, {}), await metaLivePromise);
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
@@ -453,22 +464,22 @@ async function fetchData(forceRefresh = false) {
     const gAge     = gadsRows.age, gGender = gadsRows.gender, gLoc = [], gAg = [], gKw = [];
     const sholineJson = safeParse(sholineTxt, {});
     const ga4Cache = {
-      daily:               safeParse(ga4DailyTxt, []),
-      daily_channels:      safeParse(ga4ChTxt, []),
-      daily_source_medium: safeParse(ga4SmTxt, []),
+      daily:               ga4DailyTxt,
+      daily_channels:      ga4ChTxt,
+      daily_source_medium: ga4SmTxt,
       daily_items:         [],
       daily_search:        [],
     };
     // lazy load items + search + SL product/discount data in background
     let slItemsCache = {}, slDiscCache = {};
     Promise.all([
-      cachedFetch('./ga4_items.json').catch(() => '[]'),
-      cachedFetch('./ga4_search.json').catch(() => '[]'),
+      loadGa4File('ga4_items', since.replace(/-/g,'')),
+      loadGa4File('ga4_search', since.replace(/-/g,'')),
       cachedFetch('./sl_items_cache.json').catch(() => '{}'),
       cachedFetch('./sl_discounts_cache.json').catch(() => '{}'),
     ]).then(([itemsTxt, searchTxt, slItemsTxt, slDiscTxt]) => {
-      ga4Cache.daily_items  = safeParse(itemsTxt, []);
-      ga4Cache.daily_search = safeParse(searchTxt, []);
+      ga4Cache.daily_items  = itemsTxt;
+      ga4Cache.daily_search = searchTxt;
       slItemsCache = safeParse(slItemsTxt, {});
       slDiscCache  = safeParse(slDiscTxt, {});
       renderGA4(ga4Cache, since, until, trendData, gDaily, prev, prevTrendData);

@@ -298,10 +298,32 @@ def update_ga4():
     with open("ga4_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
     # write split files for fast frontend loading
+    RECENT_DAYS = 200
+    recent_cut = (TODAY - timedelta(days=RECENT_DAYS)).strftime("%Y%m%d")
+    TEXT_FIELDS = {"date","sessionSourceMedium","sessionDefaultChannelGrouping","itemName","searchTerm"}
+
+    def slim(row):
+        out = {}
+        for k, v in row.items():
+            if k in TEXT_FIELDS:
+                out[k] = v
+                continue
+            try:
+                n = float(v)
+                out[k] = int(n) if n == int(n) else (round(n, 2) if abs(n) >= 1 else round(n, 4))
+            except (TypeError, ValueError):
+                out[k] = v
+        return out
+
     for key in ["daily","daily_channels","daily_source_medium","daily_items","daily_search"]:
         fname = "ga4_" + key.replace("daily_","").replace("daily","daily") + ".json"
+        rows = cache.get(key, [])
         with open(fname, "w") as f:
-            json.dump(cache.get(key, []), f, ensure_ascii=False)
+            json.dump(rows, f, ensure_ascii=False)
+        recent = [slim(r) for r in rows if str(r.get("date","")) >= recent_cut]
+        with open(fname.replace(".json", "_recent.json"), "w") as f:
+            json.dump(recent, f, ensure_ascii=False, separators=(",", ":"))
+        print(f"[GA4] {fname}: {len(rows)} 列 / recent {len(recent)} 列")
     with open("ga4_meta.json","w") as f:
         json.dump({"updated": cache["updated"]}, f)
 
