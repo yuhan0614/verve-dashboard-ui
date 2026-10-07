@@ -51,3 +51,21 @@ jobs:
             sleep 5
           done
           echo "重試 5 次仍失敗"; exit 1
+
+      - name: 檢查資料來源是否都正常
+        if: always()
+        run: |
+          if [ ! -f cache_status.json ]; then
+            echo "::error::update_cache.py 沒跑完，沒有產生 cache_status.json"
+            exit 1
+          fi
+          python - <<'EOF'
+          import json, sys
+          s = json.load(open("cache_status.json"))
+          if s["ok"]:
+              print("✅ 所有資料來源都正常")
+              sys.exit(0)
+          for f in s["failures"]:
+              print(f"::error::資料來源異常 — {f}")
+          sys.exit(1)
+          EOF

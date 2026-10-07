@@ -513,22 +513,71 @@ def update_gads():
         json.dump(data, f, ensure_ascii=False)
     print(f"[GADS] {len(data.get('data',[]))} rows, {len(data.get('age',[]))} age, {len(data.get('gender',[]))} gender")
 
+def _freshness(path, kind):
+    """回傳該來源最新一筆資料的日期，用來判斷是不是真的有更新到"""
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except Exception as e:
+        return None, f"讀不到 {path}：{e}"
+    if kind == "meta":
+        ds = [r.get("date_start", "") for r in d.get("daily", [])]
+    elif kind == "gads":
+        ds = [r.get("date", "") for r in d.get("data", [])]
+    elif kind == "ga4":
+        ds = [str(r.get("date", "")) for r in d]
+        ds = [f"{x[:4]}-{x[4:6]}-{x[6:]}" for x in ds if len(x) == 8]
+    elif kind == "sl":
+        ds = list(d.keys())
+    else:
+        ds = []
+    return (max(ds) if ds else None), None
+
+
 if __name__ == "__main__":
+    failures = []
+
     print("=== Updating SHOPLINE ===")
-    update_shopline()
-    print("=== Updating GA4 ===")
     try:
-        update_ga4()
+        update_shopline()
     except Exception as e:
-        print(f"[GA4] SKIPPED — {e}")
-    print("=== Updating Meta ===")
-    try:
-        update_meta()
-    except Exception as e:
-        print(f"[Meta] SKIPPED — {e}")
-    print("=== Updating Google Ads ===")
-    try:
-        update_gads()
-    except Exception as e:
-        print(f"[GADS] SKIPPED — {e}")
-    print("=== Done ===")
+        failures.append(f"SHOPLINE：{e}")
+        print(f"[SL] FAILED — {e}")
+
+    for label, fn in (("GA4", update_ga4), ("Meta", update_meta), ("Google Ads", update_gads)):
+        print(f"=== Updating {label} ===")
+        try:
+            fn()
+        except Exception as e:
+            failures.append(f"{label}：{e}")
+            print(f"[{label}] FAILED — {e}")
+
+    # 即使沒丟出例外，也要確認資料真的有推進到近期（避免靜默失效）
+    yesterday = (TODAY - timedelta(days=1)).strftime("%Y-%m-%d")
+    checks = [("SHOPLINE", "sl_cache.json", "sl"), ("GA4", "ga4_daily.json", "ga4"),
+              ("Meta", "meta_cache.json", "meta"), ("Google Ads", "gads_cache.json", "gads")]
+    print("\n=== 資料新鮮度檢查（應 >= %s）===" % yesterday)
+    for label, path, kind in checks:
+        latest, err = _freshness(path, kind)
+        if err:
+            failures.append(f"{label}：{err}")
+            print(f"  {label:<12} ❌ {err}")
+        elif not latest:
+            failures.append(f"{label}：沒有任何資料")
+            print(f"  {label:<12} ❌ 沒有任何資料")
+        elif latest < yesterday:
+            failures.append(f"{label}：資料只到 {latest}，已過期")
+            print(f"  {label:<12} ❌ 只到 {latest}（應 >= {yesterday}）")
+        else:
+            print(f"  {label:<12} ✅ 最新 {latest}")
+
+    with open("cache_status.json", "w") as f:
+        json.dump({"ok": not failures, "failures": failures,
+                   "checked_at": TODAY.strftime("%Y-%m-%d %H:%M")}, f, ensure_ascii=False)
+
+    if failures:
+        print("\n=== 有問題，但已寫入的資料仍會提交 ===")
+        for x in failures:
+            print(f"  ⚠️  {x}")
+    else:
+        print("\n=== Done：全部來源正常 ===")
