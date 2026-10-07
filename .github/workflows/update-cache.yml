@@ -36,6 +36,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sl_cache.json sl_items_cache.json sl_discounts_cache.json ga4_cache.json meta_cache.json ga4_daily.json ga4_channels.json ga4_source_medium.json ga4_items.json ga4_search.json ga4_meta.json gads_cache.json
-          git diff --cached --quiet || git commit -m "chore: auto-update cache $(date -u +%Y-%m-%d)"
-          git push
+          git add sl_cache.json sl_items_cache.json sl_discounts_cache.json ga4_cache.json meta_cache.json ga4_meta.json gads_cache.json
+          git add ga4_daily.json ga4_channels.json ga4_source_medium.json ga4_items.json ga4_search.json
+          git add ga4_*_recent.json
+          if git diff --cached --quiet; then
+            echo "沒有變更，不需提交"
+            exit 0
+          fi
+          git commit -m "chore: auto-update cache $(date -u +%Y-%m-%d)"
+          for i in 1 2 3 4 5; do
+            if git push; then echo "推送成功"; exit 0; fi
+            echo "推送被拒（第 $i 次），改用 rebase 後重試…"
+            git pull --rebase --autostash origin main || exit 1
+            sleep 5
+          done
+          echo "重試 5 次仍失敗"; exit 1
