@@ -501,17 +501,42 @@ def update_meta():
 RENDER_GADS_API = "https://verve-dashboard-api.fly.dev/api/google-ads"
 
 def update_gads():
-    start = (TODAY - timedelta(days=30)).strftime("%Y-%m-%d")
+    start = (TODAY - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
     end   = TODAY.strftime("%Y-%m-%d")
-    r = requests.get(f"{RENDER_GADS_API}?since={start}&until={end}", timeout=120)
+    r = requests.get(f"{RENDER_GADS_API}?since={start}&until={end}", timeout=180)
     data = r.json()
     if "error" in data:
         raise Exception(data["error"])
-    data["cached_since"] = start
-    data["cached_until"] = end
+
+    try:
+        with open("gads_cache.json") as f:
+            cache = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        cache = {"data": [], "age": [], "gender": []}
+
+    # 跟 Meta/GA4 一樣合併進既有快取，歷史才會累積（原本整包覆蓋只留得住近 30 天）
+    def merge(existing, new_rows, key_fn):
+        m = {key_fn(r): r for r in existing}
+        for r in new_rows:
+            m[key_fn(r)] = r
+        return sorted(m.values(), key=key_fn)
+
+    cache["data"]   = merge(cache.get("data", []),   data.get("data", []),
+                            lambda r: (r.get("date",""), r.get("campaign_id","")))
+    cache["age"]    = merge(cache.get("age", []),    data.get("age", []),
+                            lambda r: (r.get("date",""), r.get("campaign_name",""), r.get("age","")))
+    cache["gender"] = merge(cache.get("gender", []), data.get("gender", []),
+                            lambda r: (r.get("date",""), r.get("campaign_name",""), r.get("gender","")))
+
+    all_dates = [r.get("date","") for r in cache["data"] if r.get("date")]
+    cache["cached_since"] = min(all_dates) if all_dates else start
+    cache["cached_until"] = max(all_dates) if all_dates else end
+    cache["updated"] = end
     with open("gads_cache.json", "w") as f:
-        json.dump(data, f, ensure_ascii=False)
-    print(f"[GADS] {len(data.get('data',[]))} rows, {len(data.get('age',[]))} age, {len(data.get('gender',[]))} gender")
+        json.dump(cache, f, ensure_ascii=False)
+    print(f"[GADS] 本次 {len(data.get('data',[]))} 列 → 累計 {len(cache['data'])} 列"
+          f"（{cache['cached_since']} ~ {cache['cached_until']}）"
+          f"，age {len(cache['age'])}、gender {len(cache['gender'])}")
 
 def _freshness(path, kind):
     """回傳該來源最新一筆資料的日期，用來判斷是不是真的有更新到"""
