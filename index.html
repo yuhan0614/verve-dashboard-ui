@@ -875,7 +875,7 @@ function groupRows(rows, keyFn, metaFn) {
     }
     const g = map[key];
     if (r.ad_name) g._ads.add(r.ad_name);
-    if (r.asset_url) g._thumbs.add(r.asset_url);
+    if (r.asset_url && (r.impressions || 0) > 0) g._thumbs.add(r.asset_url);
     g.spend         += r.spend         || 0;
     g.impressions   += r.impressions   || 0;
     g.link_clicks   += r.link_clicks   || 0;
@@ -913,7 +913,9 @@ function applyAdFilter() {
     r => ({ kind: 'ad',
             thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '' }));
 
-  const all = [...assets, ...ads].filter(r => !q || (r.ad_names||'').toLowerCase().includes(q));
+  const all = [...assets, ...ads]
+    .filter(r => (r.spend || 0) > 0 || (r.impressions || 0) > 0)
+    .filter(r => !q || (r.ad_names||'').toLowerCase().includes(q));
   renderAdTable(all);
 }
 
