@@ -91,6 +91,7 @@
   .spend-bar-wrap { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
   .spend-bar { height: 5px; border-radius: 3px; background: #52c41a; opacity: 0.65; min-width: 2px; }
   .cell-name { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .ad-names { font-weight: 600; white-space: nowrap; line-height: 1.6; display: block; }
   .cell-sub { font-size: 11px; color: #aaa; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 
   /* Filters */
@@ -940,7 +941,7 @@ function renderAdTable(data) {
                 : r.kind === 'video' ? '<span class="gads-badge">影片</span>' : '';
     return `<tr>
       <td>
-        <span class="cell-name" title="${r.ad_names||''}">${r.ad_names||'—'}</span>${badge}
+        <span class="ad-names">${r.ad_names ? r.ad_names.split('、').join('<br>') : '—'}</span>${badge}
       </td>
       <td style="text-align:center">${thumbCell}</td>
       <td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>
