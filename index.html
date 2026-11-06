@@ -838,7 +838,7 @@ function renderCreative() {
               <option value="">所有廣告活動</option>
               ${campaigns.map(c=>`<option value="${c}">${c.replace('VERVE_','')}</option>`).join('')}
             </select>
-            <input type="text" class="search-input" id="adSearch" placeholder="搜尋素材名稱…" oninput="applyAdFilter()">
+            <input type="text" class="search-input" id="adSearch" placeholder="搜尋素材或廣告名稱…" oninput="applyAdFilter()">
             <span class="count-badge" id="adCount"></span>
           </div>
         </div>
@@ -847,6 +847,7 @@ function renderCreative() {
         <table>
           <thead><tr>
             <th>素材名稱</th>
+            <th>廣告名稱</th>
             <th style="text-align:center">縮圖</th>
             <th class="sortable" onclick="sortAds('spend')">花費</th>
             <th class="sortable" onclick="sortAds('impressions')">曝光</th>
@@ -870,9 +871,10 @@ function groupRows(rows, keyFn, metaFn) {
   for (const r of rows) {
     const key = keyFn(r);
     if (!map[key]) {
-      map[key] = { ...metaFn(r), spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
+      map[key] = { ...metaFn(r), _ads: new Set(), spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
     }
     const g = map[key];
+    if (r.ad_name) g._ads.add(r.ad_name);
     g.spend         += r.spend         || 0;
     g.impressions   += r.impressions   || 0;
     g.link_clicks   += r.link_clicks   || 0;
@@ -882,6 +884,7 @@ function groupRows(rows, keyFn, metaFn) {
   }
   return Object.values(map).map(g => ({
     ...g,
+    ad_names: [...g._ads].sort().join('、'),
     ctr:  g.impressions > 0 ? g.link_clicks / g.impressions * 100 : 0,
     cplc: g.link_clicks > 0 ? g.spend / g.link_clicks : 0,
     roas: g.spend > 0 ? g.purchase_value / g.spend : 0,
@@ -903,13 +906,14 @@ function applyAdFilter() {
   const assets = groupRows(assetRows,
     r => `${r.asset_kind}|${r.asset_id}`,
     r => ({ ad_name: r.asset_name || r.asset_id, kind: r.asset_kind,
-            thumb: r.asset_url || '', ad_names: r.ad_name || '' }));
+            thumb: r.asset_url || '' }));
   const ads = groupRows(adRows,
     r => r.ad_name || '—',
     r => ({ ad_name: r.ad_name || '—', kind: 'ad',
-            thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '', ad_names: '' }));
+            thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '' }));
 
-  const all = [...assets, ...ads].filter(r => !q || (r.ad_name||'').toLowerCase().includes(q));
+  const all = [...assets, ...ads].filter(r => !q ||
+    (r.ad_name||'').toLowerCase().includes(q) || (r.ad_names||'').toLowerCase().includes(q));
   renderAdTable(all);
 }
 
@@ -940,6 +944,7 @@ function renderAdTable(data) {
       <td>
         <span class="cell-name" title="${r.ad_name}">${r.ad_name||'—'}</span>${badge}
       </td>
+      <td><span class="cell-name" title="${r.ad_names||''}">${r.ad_names||'<span class="na">—</span>'}</span></td>
       <td style="text-align:center">${thumbCell}</td>
       <td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>
       <td>${fmtN(r.impressions)}</td>
