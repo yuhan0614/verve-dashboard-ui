@@ -871,10 +871,11 @@ function groupRows(rows, keyFn, metaFn) {
   for (const r of rows) {
     const key = keyFn(r);
     if (!map[key]) {
-      map[key] = { ...metaFn(r), _ads: new Set(), spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
+      map[key] = { ...metaFn(r), _ads: new Set(), _thumbs: new Set(), spend: 0, impressions: 0, link_clicks: 0, add_to_cart: 0, purchase: 0, purchase_value: 0 };
     }
     const g = map[key];
     if (r.ad_name) g._ads.add(r.ad_name);
+    if (r.asset_url) g._thumbs.add(r.asset_url);
     g.spend         += r.spend         || 0;
     g.impressions   += r.impressions   || 0;
     g.link_clicks   += r.link_clicks   || 0;
@@ -885,6 +886,7 @@ function groupRows(rows, keyFn, metaFn) {
   return Object.values(map).map(g => ({
     ...g,
     ad_names: [...g._ads].sort().join('、'),
+    thumbs: [...g._thumbs],
     ctr:  g.impressions > 0 ? g.link_clicks / g.impressions * 100 : 0,
     cplc: g.link_clicks > 0 ? g.spend / g.link_clicks : 0,
     roas: g.spend > 0 ? g.purchase_value / g.spend : 0,
@@ -904,12 +906,11 @@ function applyAdFilter() {
   const adRows = allAdData.filter(r => inRange(r) && inCamp(r) && !assetAdIds.has(r.ad_id));
 
   const assets = groupRows(assetRows,
-    r => `${r.asset_kind}|${r.asset_id}`,
-    r => ({ ad_name: r.asset_name || r.asset_id, kind: r.asset_kind,
-            thumb: r.asset_url || '' }));
+    r => r.ad_name || '—',
+    r => ({ kind: r.asset_kind, thumb: '' }));
   const ads = groupRows(adRows,
     r => r.ad_name || '—',
-    r => ({ ad_name: r.ad_name || '—', kind: 'ad',
+    r => ({ kind: 'ad',
             thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '' }));
 
   const all = [...assets, ...ads].filter(r => !q || (r.ad_names||'').toLowerCase().includes(q));
@@ -934,8 +935,11 @@ function renderAdTable(data) {
   document.getElementById('adCount').textContent = `${sorted.length} 筆`;
   document.getElementById('adTableBody').innerHTML = sorted.map(r => {
     const bw = Math.round((r.spend||0)/maxSpend*60);
-    const thumbCell = r.thumb
-      ? `<img src="${r.thumb}" loading="lazy" referrerpolicy="no-referrer" style="width:120px;height:120px;object-fit:cover;border-radius:8px;display:block;margin:0 auto;border:1px solid #eee;" onerror="this.parentNode.innerHTML='<span class=\\'na\\'>—</span>'">`
+    const imgs = (r.thumbs && r.thumbs.length) ? r.thumbs.slice(0,4) : (r.thumb ? [r.thumb] : []);
+    const thumbCell = imgs.length
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">${imgs.map(u =>
+          `<img src="${u}" loading="lazy" referrerpolicy="no-referrer" style="width:${imgs.length>1?72:120}px;height:${imgs.length>1?72:120}px;object-fit:cover;border-radius:8px;display:block;border:1px solid #eee;" onerror="this.remove()">`
+        ).join('')}</div>`
       : '<span class="na">—</span>';
     const badge = r.kind === 'image' ? '<span class="gads-badge">圖像</span>'
                 : r.kind === 'video' ? '<span class="gads-badge">影片</span>' : '';
