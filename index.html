@@ -838,7 +838,7 @@ function renderCreative() {
               <option value="">所有廣告活動</option>
               ${campaigns.map(c=>`<option value="${c}">${c.replace('VERVE_','')}</option>`).join('')}
             </select>
-            <input type="text" class="search-input" id="adSearch" placeholder="搜尋素材或廣告名稱…" oninput="applyAdFilter()">
+            <input type="text" class="search-input" id="adSearch" placeholder="搜尋廣告名稱…" oninput="applyAdFilter()">
             <span class="count-badge" id="adCount"></span>
           </div>
         </div>
@@ -846,7 +846,6 @@ function renderCreative() {
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>素材名稱</th>
             <th>廣告名稱</th>
             <th style="text-align:center">縮圖</th>
             <th class="sortable" onclick="sortAds('spend')">花費</th>
@@ -912,8 +911,7 @@ function applyAdFilter() {
     r => ({ ad_name: r.ad_name || '—', kind: 'ad',
             thumb: (adUrlMap[r.ad_name]||{}).image || (adUrlMap[r.ad_name]||{}).thumb || '' }));
 
-  const all = [...assets, ...ads].filter(r => !q ||
-    (r.ad_name||'').toLowerCase().includes(q) || (r.ad_names||'').toLowerCase().includes(q));
+  const all = [...assets, ...ads].filter(r => !q || (r.ad_names||'').toLowerCase().includes(q));
   renderAdTable(all);
 }
 
@@ -942,9 +940,8 @@ function renderAdTable(data) {
                 : r.kind === 'video' ? '<span class="gads-badge">影片</span>' : '';
     return `<tr>
       <td>
-        <span class="cell-name" title="${r.ad_name}">${r.ad_name||'—'}</span>${badge}
+        <span class="cell-name" title="${r.ad_names||''}">${r.ad_names||'—'}</span>${badge}
       </td>
-      <td><span class="cell-name" title="${r.ad_names||''}">${r.ad_names||'<span class="na">—</span>'}</span></td>
       <td style="text-align:center">${thumbCell}</td>
       <td><div class="spend-bar-wrap">${fmtM(r.spend)}<div class="spend-bar" style="width:${bw}px"></div></div></td>
       <td>${fmtN(r.impressions)}</td>
