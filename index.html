@@ -279,6 +279,22 @@ function ga4CampRevenue(keys, since, until) {
   return hit ? rev : null;
 }
 
+// 依日／週／月分桶的 GA4 營收，key 與各表展開列的日期標籤一致
+function ga4CampRevByGrain(keys, since, until, grain) {
+  const s = since.replace(/-/g,''), u = until.replace(/-/g,'');
+  const set = new Set(keys.filter(Boolean));
+  const out = {};
+  if (!set.size) return out;
+  for (const r of ga4CampRows) {
+    const d = String(r.date);
+    if (d < s || d > u || !set.has(r.sessionCampaignName)) continue;
+    const ymd = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`;
+    const { label } = dayGrainKey(ymd, grain);
+    out[label] = (out[label] || 0) + (r.totalRevenue || 0);
+  }
+  return out;
+}
+
 function gadsUtmKey(name) {
   const n = name || '';
   if (/^SEM_int/i.test(n))  return 'sem_int';
@@ -657,6 +673,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
             const pct = total.spend > 0 ? (r.spend/total.spend*100).toFixed(1) : '0';
             const bw = Math.round(r.spend/maxSpend*80);
             const subId = 'metacamp-' + ci;
+            const g4 = ga4CampRevByGrain([r.campaign_name], since, until, perfGrain);
             const subs = bucketByGrain(
               (allCampDaily||[]).filter(x => x.campaign_id === r.campaign_id && x.date_start >= since && x.date_start <= until)
                                 .sort((a,b) => a.date_start > b.date_start ? 1 : -1),
@@ -691,7 +708,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(x.purchase_value)}</td>
                 <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(x.cpa)}</td>
-                <td></td>
+                ${ga4RoasCell(g4[x.date_start] ?? null, x.spend, '')}
               </tr>`).join('')}</tbody>`;
           }).join('')}
           ${(() => {
@@ -704,6 +721,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
             ct.cplc = ct.link_clicks>0 ? ct.spend/ct.link_clicks : 0;
             ct.roas = ct.spend>0 ? ct.purchase_value/ct.spend : 0;
             ct.cpa  = ct.purchase>0 ? ct.spend/ct.purchase : 0;
+            const g4t = ga4CampRevByGrain(sorted.map(r => r.campaign_name), since, until, perfGrain);
             const subs = bucketByGrain(
               (allCampDaily||[]).filter(x => x.date_start >= since && x.date_start <= until)
                                 .sort((a,b) => a.date_start > b.date_start ? 1 : -1),
@@ -737,7 +755,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(x.purchase_value)}</td>
                 <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(x.cpa)}</td>
-                <td></td>
+                ${ga4RoasCell(g4t[x.date_start] ?? null, x.spend, '')}
               </tr>`).join('')}</tbody>`;
           })()}
         </table>
@@ -1758,6 +1776,17 @@ function renderGoogleAds(data, since, until, prev) {
           const bw = Math.round(r.spend/maxCampSpend*80);
           const subId = 'gadscamp-' + i;
           const name = r['廣告活動'];
+          const utmK = gadsUtmKey(name);
+          const peerNames = campSorted.filter(x => gadsUtmKey(x['廣告活動']) === utmK).map(x => x['廣告活動']);
+          const g4 = utmK ? ga4CampRevByGrain([utmK], since, until, gaGrain) : {};
+          const g4Spend = {};
+          bucketByGrain(
+            filterByDate(data.campaign || [], since, until)
+              .filter(x => peerNames.includes(x['廣告活動']))
+              .map(x => ({ date: x['日期'], spend: parseFloat(x['花費(TWD)'])||0 }))
+              .sort((a,b) => a.date > b.date ? 1 : -1),
+            'date', gaGrain, ['spend']
+          ).forEach(x => { g4Spend[x.date] = (g4Spend[x.date]||0) + x.spend; });
           const subs = bucketByGrain(
             filterByDate(data.campaign || [], since, until)
               .filter(x => x['廣告活動'] === name)
@@ -1799,7 +1828,7 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(x.purchase)}</td><td>${fmtM(x.revenue)}</td>
               <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
-              <td></td>
+              ${ga4RoasCell(g4[x.date] ?? null, g4Spend[x.date] || x.spend, peerNames.length>1?'同組合計':'')}
             </tr>`).join('')}</tbody>`;
         }).join('')}
         ${(() => {
@@ -1810,6 +1839,7 @@ function renderGoogleAds(data, since, until, prev) {
           ct.ctr  = ct.imp>0 ? ct.clk/ct.imp*100 : 0;
           ct.roas = ct.spend>0 ? ct.revenue/ct.spend : 0;
           ct.cpa  = ct.purchase>0 ? ct.spend/ct.purchase : 0;
+          const g4t = ga4CampRevByGrain([...new Set(campSorted.map(x => gadsUtmKey(x['廣告活動'])))], since, until, gaGrain);
           const subs = bucketByGrain(
             filterByDate(data.campaign || [], since, until)
               .map(x => ({ date: x['日期'],
@@ -1841,7 +1871,7 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(x.purchase)}</td><td>${fmtM(x.revenue)}</td>
               <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
-              <td></td>
+              ${ga4RoasCell(g4t[x.date] ?? null, x.spend, '')}
             </tr>`).join('')}</tbody>`;
         })()}
       </table></div>
