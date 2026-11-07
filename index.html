@@ -263,6 +263,36 @@ let allAdData = [];
 let allCampDaily = [];
 let allAssetData = [];
 let adUrlMap = {};
+let ga4CampRows = [];
+
+// GA4 以 utm_campaign 歸因的營收。Meta 的 utm 直接等於活動名稱；Google 只打到 sem / pmax 層級
+function ga4CampRevenue(keys, since, until) {
+  const s = since.replace(/-/g,''), u = until.replace(/-/g,'');
+  const set = new Set(keys.filter(Boolean));
+  if (!set.size) return null;
+  let rev = 0, hit = false;
+  for (const r of ga4CampRows) {
+    const d = String(r.date);
+    if (d < s || d > u || !set.has(r.sessionCampaignName)) continue;
+    rev += r.totalRevenue || 0; hit = true;
+  }
+  return hit ? rev : null;
+}
+
+function gadsUtmKey(name) {
+  const n = name || '';
+  if (/^SEM_int/i.test(n))  return 'sem_int';
+  if (/^SEM_/i.test(n))     return 'sem';
+  if (/^Pmax/i.test(n))     return /舊客/.test(n) ? 'pmax-舊客' : 'pmax';
+  return null;
+}
+
+function ga4RoasCell(rev, spend, note) {
+  if (rev === null || !spend) return '<td><span class="na">—</span></td>';
+  const v = rev / spend;
+  const mark = note ? `<span style="font-size:10px;color:#aaa;margin-left:3px">群</span>` : '';
+  return `<td class="${rc(v)}" title="${note || ''}">${v.toFixed(2)}x${mark}</td>`;
+}
 let adSince = '', adUntil = '';
 let sortKey = '', sortDir = -1;
 
@@ -436,7 +466,7 @@ async function fetchData(forceRefresh = false) {
       ? fetch(`${GADS_API}?since=${since}&until=${until}`).then(r => r.json()).catch(() => null)
       : null;
     const [metaResult, gadsResult, sholineTxt,
-           ga4DailyTxt, ga4ChTxt, ga4SmTxt] = await Promise.all([
+           ga4DailyTxt, ga4ChTxt, ga4SmTxt, ga4CampTxt] = await Promise.all([
       (forceRefresh
         ? fetch(`${metaUrl}?t=${Date.now()}`).then(r=>r.text())
         : cachedFetch(metaUrl)
@@ -446,7 +476,9 @@ async function fetchData(forceRefresh = false) {
       loadGa4File('ga4_daily', since.replace(/-/g,'')),
       loadGa4File('ga4_channels', since.replace(/-/g,'')),
       loadGa4File('ga4_source_medium', since.replace(/-/g,'')),
+      loadGa4File('ga4_campaigns', since.replace(/-/g,'')),
     ]);
+    ga4CampRows = Array.isArray(ga4CampTxt) ? ga4CampTxt : safeParse(ga4CampTxt, []);
     const metaCache = mergeMetaLive(safeParse(metaResult, {}), await metaLivePromise);
     const trendData     = metaAgg(metaCache.daily     || [], since, until, ['date_start']);
     const prevTrendData = metaAgg(metaCache.daily     || [], prev.since, prev.until, ['date_start']);
@@ -619,6 +651,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
           <thead><tr>
             <th>廣告活動</th><th>花費</th><th>佔比</th><th>曝光</th><th>CTR</th>
             <th>連結點擊</th><th>CPLC</th><th>加車</th><th>購買</th><th>轉換值</th><th>ROAS</th><th>CPA</th>
+            <th title="GA4 以 utm_campaign 歸因的營收 ÷ 花費">GA4 ROAS</th>
           </tr></thead>
           ${sorted.map((r,ci) => {
             const pct = total.spend > 0 ? (r.spend/total.spend*100).toFixed(1) : '0';
@@ -646,6 +679,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(r.purchase_value)}</td>
                 <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(r.cpa)}</td>
+                ${ga4RoasCell(ga4CampRevenue([r.campaign_name], since, until), r.spend, '')}
               </tr>
             </tbody>
             <tbody id="${subId}" style="display:none">${subs.map(x => `<tr style="background:#f7f9fc">
@@ -657,6 +691,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(x.purchase_value)}</td>
                 <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(x.cpa)}</td>
+                <td></td>
               </tr>`).join('')}</tbody>`;
           }).join('')}
           ${(() => {
@@ -690,6 +725,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(ct.purchase_value)}</td>
                 <td class="${rc(ct.roas)}">${ct.roas?ct.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(ct.cpa)}</td>
+                ${ga4RoasCell(ga4CampRevenue(sorted.map(r => r.campaign_name), since, until), ct.spend, '')}
               </tr>
             </tbody>
             <tbody id="metacamp-total" style="display:none">${subs.map(x => `<tr style="background:#eaf2fe">
@@ -701,6 +737,7 @@ function renderPerf(camps, trend, since, until, prevTrendData) {
                 <td>${fmtM(x.purchase_value)}</td>
                 <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
                 <td>${fmtM(x.cpa)}</td>
+                <td></td>
               </tr>`).join('')}</tbody>`;
           })()}
         </table>
@@ -1714,6 +1751,7 @@ function renderGoogleAds(data, since, until, prev) {
       <div class="table-wrap"><table>
         <thead><tr>
           <th>廣告活動</th><th>花費</th><th>佔比</th><th>曝光</th><th>點擊</th><th>CTR</th><th>購買</th><th>營收</th><th>ROAS</th><th>CPA</th>
+          <th title="GA4 以 utm_campaign 歸因的營收 ÷ 花費。Google 的 utm 只打到 sem / pmax 層級，標「群」者為同一組的合計">GA4 ROAS</th>
         </tr></thead>
         ${campSorted.map((r,i) => {
           const pct = total.spend > 0 ? (r.spend/total.spend*100).toFixed(1) : '0';
@@ -1743,6 +1781,15 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(r.purchase)}</td><td>${fmtM(r.revenue)}</td>
               <td class="${rc(r.roas)}">${r.roas?r.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${r.cpa?fmtM(r.cpa):'<span class="na">—</span>'}</td>
+              ${(() => {
+                const k = gadsUtmKey(name);
+                if (!k) return '<td><span class="na">—</span></td>';
+                const peers = campSorted.filter(x => gadsUtmKey(x['廣告活動']) === k);
+                const grpSpend = peers.reduce((s,x) => s + (x.spend||0), 0);
+                const note = peers.length > 1
+                  ? `GA4 utm_campaign「${k}」為以下活動合計：${peers.map(x=>x['廣告活動']).join('、')}` : '';
+                return ga4RoasCell(ga4CampRevenue([k], since, until), grpSpend, note);
+              })()}
             </tr>
           </tbody>
           <tbody id="${subId}" style="display:none">${subs.map(x => `<tr style="background:#f7fbf8">
@@ -1752,6 +1799,7 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(x.purchase)}</td><td>${fmtM(x.revenue)}</td>
               <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
+              <td></td>
             </tr>`).join('')}</tbody>`;
         }).join('')}
         ${(() => {
@@ -1783,6 +1831,7 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(ct.purchase)}</td><td>${fmtM(ct.revenue)}</td>
               <td class="${rc(ct.roas)}">${ct.roas?ct.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${ct.cpa?fmtM(ct.cpa):'<span class="na">—</span>'}</td>
+              ${ga4RoasCell(ga4CampRevenue([...new Set(campSorted.map(r => gadsUtmKey(r['廣告活動'])))], since, until), ct.spend, '')}
             </tr>
           </tbody>
           <tbody id="gadscamp-total" style="display:none">${subs.map(x => `<tr style="background:#e9f6ee">
@@ -1792,6 +1841,7 @@ function renderGoogleAds(data, since, until, prev) {
               <td>${fmtN(x.purchase)}</td><td>${fmtM(x.revenue)}</td>
               <td class="${rc(x.roas)}">${x.roas?x.roas.toFixed(2)+'x':'<span class="na">—</span>'}</td>
               <td>${x.cpa?fmtM(x.cpa):'<span class="na">—</span>'}</td>
+              <td></td>
             </tr>`).join('')}</tbody>`;
         })()}
       </table></div>

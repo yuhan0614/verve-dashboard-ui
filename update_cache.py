@@ -277,6 +277,16 @@ def update_ga4():
     cache["daily_source_medium"] = sorted(sm_map.values(), key=lambda r: (r["date"], r["sessionSourceMedium"]))
     print(f"[GA4] daily_source_medium updated: {len(new_sm)} rows")
 
+    # daily_campaigns（只留廣告平台的 utm_campaign，用來算各活動的 GA4 ROAS）
+    CAMP_PREFIX = ("VERVE_", "SEM_", "sem", "Pmax", "pmax")
+    new_camp = [r for r in ga4_fetch(client, ["date", "sessionCampaignName"], GA4_METRICS, start_date, end_date, limit=5000)
+                if r["sessionCampaignName"].startswith(CAMP_PREFIX)]
+    camp_map = {(r["date"], r["sessionCampaignName"]): r for r in cache.get("daily_campaigns", [])}
+    for r in new_camp:
+        camp_map[(r["date"], r["sessionCampaignName"])] = r
+    cache["daily_campaigns"] = sorted(camp_map.values(), key=lambda r: (r["date"], r["sessionCampaignName"]))
+    print(f"[GA4] daily_campaigns updated: {len(new_camp)} rows")
+
     # daily_items
     new_items = ga4_fetch(client, ["date", "itemName"], GA4_ITEM_METRICS, start_date, end_date, limit=5000)
     item_map = {(r["date"], r["itemName"]): r for r in cache.get("daily_items", [])}
@@ -300,7 +310,7 @@ def update_ga4():
     # write split files for fast frontend loading
     RECENT_DAYS = 200
     recent_cut = (TODAY - timedelta(days=RECENT_DAYS)).strftime("%Y%m%d")
-    TEXT_FIELDS = {"date","sessionSourceMedium","sessionDefaultChannelGrouping","itemName","searchTerm"}
+    TEXT_FIELDS = {"date","sessionSourceMedium","sessionDefaultChannelGrouping","sessionCampaignName","itemName","searchTerm"}
 
     def slim(row):
         out = {}
@@ -315,7 +325,7 @@ def update_ga4():
                 out[k] = v
         return out
 
-    for key in ["daily","daily_channels","daily_source_medium","daily_items","daily_search"]:
+    for key in ["daily","daily_channels","daily_source_medium","daily_campaigns","daily_items","daily_search"]:
         fname = "ga4_" + key.replace("daily_","").replace("daily","daily") + ".json"
         rows = cache.get(key, [])
         with open(fname, "w") as f:
