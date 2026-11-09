@@ -2059,11 +2059,11 @@ function ga4BucketDaily(rows, grain) {
   const map = {};
   for (const r of rows) {
     const { k, label } = ga4GrainKey(r.date, grain);
-    if (!map[k]) map[k] = { date:k, _label:label, sessions:0, addToCarts:0, conversions:0, totalRevenue:0, _dur:0, _bounce:0 };
+    if (!map[k]) map[k] = { date:k, _label:label, sessions:0, addToCarts:0, transactions:0, totalRevenue:0, _dur:0, _bounce:0 };
     const g = map[k], s = parseFloat(r.sessions||0);
     g.sessions += s;
     g.addToCarts   += parseFloat(r.addToCarts||0);
-    g.conversions  += parseFloat(r.conversions||0);
+    g.transactions  += parseFloat(r.transactions||0);
     g.totalRevenue += parseFloat(r.totalRevenue||0);
     g._dur    += parseFloat(r.averageSessionDuration||0) * s;
     g._bounce += parseFloat(r.bounceRate||0) * s;
@@ -2106,11 +2106,11 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= sinceD && r.date <= untilD)
     .forEach(r => {
       const k = r.sessionDefaultChannelGrouping||'(other)';
-      if (!chMap[k]) chMap[k] = {sessionDefaultChannelGrouping:k,sessions:0,addToCarts:0,conversions:0,totalRevenue:0,_dur:0,_bRate:0,_n:0};
+      if (!chMap[k]) chMap[k] = {sessionDefaultChannelGrouping:k,sessions:0,addToCarts:0,transactions:0,totalRevenue:0,_dur:0,_bRate:0,_n:0};
       const m = chMap[k];
       m.sessions   += parseFloat(r.sessions||0);
       m.addToCarts += parseFloat(r.addToCarts||0);
-      m.conversions+= parseFloat(r.conversions||0);
+      m.transactions+= parseFloat(r.transactions||0);
       m.totalRevenue+=parseFloat(r.totalRevenue||0);
       m._dur  += parseFloat(r.averageSessionDuration||0);
       m._bRate+= parseFloat(r.bounceRate||0);
@@ -2128,11 +2128,11 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= sinceD && r.date <= untilD)
     .forEach(r => {
       const k = r.sessionSourceMedium||'(other)';
-      if (!smMap[k]) smMap[k] = {sessionSourceMedium:k,sessions:0,addToCarts:0,conversions:0,totalRevenue:0,_dur:0,_bRate:0,_n:0};
+      if (!smMap[k]) smMap[k] = {sessionSourceMedium:k,sessions:0,addToCarts:0,transactions:0,totalRevenue:0,_dur:0,_bRate:0,_n:0};
       const m = smMap[k];
       m.sessions   += parseFloat(r.sessions||0);
       m.addToCarts += parseFloat(r.addToCarts||0);
-      m.conversions+= parseFloat(r.conversions||0);
+      m.transactions+= parseFloat(r.transactions||0);
       m.totalRevenue+=parseFloat(r.totalRevenue||0);
       m._dur  += parseFloat(r.averageSessionDuration||0);
       m._bRate+= parseFloat(r.bounceRate||0);
@@ -2150,9 +2150,9 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= prevSinceD && r.date <= prevUntilD)
     .forEach(r => {
       const k = r.sessionDefaultChannelGrouping||'(other)';
-      if (!prevChMap[k]) prevChMap[k] = {sessions:0,conversions:0,totalRevenue:0};
+      if (!prevChMap[k]) prevChMap[k] = {sessions:0,transactions:0,totalRevenue:0};
       prevChMap[k].sessions    += parseFloat(r.sessions||0);
-      prevChMap[k].conversions += parseFloat(r.conversions||0);
+      prevChMap[k].transactions += parseFloat(r.transactions||0);
       prevChMap[k].totalRevenue+= parseFloat(r.totalRevenue||0);
     });
   const prevSmMap = {};
@@ -2160,14 +2160,14 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= prevSinceD && r.date <= prevUntilD)
     .forEach(r => {
       const k = r.sessionSourceMedium||'(other)';
-      if (!prevSmMap[k]) prevSmMap[k] = {sessions:0,conversions:0,totalRevenue:0};
+      if (!prevSmMap[k]) prevSmMap[k] = {sessions:0,transactions:0,totalRevenue:0};
       prevSmMap[k].sessions    += parseFloat(r.sessions||0);
-      prevSmMap[k].conversions += parseFloat(r.conversions||0);
+      prevSmMap[k].transactions += parseFloat(r.transactions||0);
       prevSmMap[k].totalRevenue+= parseFloat(r.totalRevenue||0);
     });
 
   const R = 'style="text-align:right"';
-  const thead = `<tr><th>${ga4Grain==='day'?'日期':ga4Grain==='week'?'週別':'月份'}</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>加車率</th><th ${R}>購買</th><th ${R}>購買率</th><th ${R}>全站營收</th><th ${R} title="全站營收 ÷ GA4 交易筆數（非左邊的「購買」欄，那欄是所有關鍵事件數）">客單價</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
+  const thead = `<tr><th>${ga4Grain==='day'?'日期':ga4Grain==='week'?'週別':'月份'}</th><th ${R}>工作階段</th><th ${R}>加入購物車</th><th ${R}>加車率</th><th ${R}>購買</th><th ${R}>購買率</th><th ${R}>全站營收</th><th ${R} title="全站營收 ÷ 購買筆數">客單價</th><th ${R}>廣告營收</th><th ${R}>廣告營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const chead = `<tr><th style="min-width:160px">管道</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
   const shead = `<tr><th style="min-width:220px">來源／媒介</th><th ${R}>工作階段</th><th ${R}>購買</th><th ${R}>全站營收</th><th ${R}>營收佔比</th><th ${R}>平均停留</th><th ${R}>跳出率</th></tr>`;
 
@@ -2176,15 +2176,14 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     const dayRevPct = parseFloat(r.totalRevenue||0) > 0 ? dayAdRev/parseFloat(r.totalRevenue)*100 : 0;
     const sess = parseFloat(r.sessions||0);
     const atcRate = sess > 0 ? parseFloat(r.addToCarts||0)/sess*100 : 0;
-    const purRate = sess > 0 ? parseFloat(r.conversions||0)/sess*100 : 0;
-    const tx = parseFloat(r.transactions||0);
-    return `<tr>
+    const purRate = sess > 0 ? parseFloat(r.transactions||0)/sess*100 : 0;
+        return `<tr>
       <td>${r._label || r.date.replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3')}</td>
       <td ${R}>${fmt(r.sessions)}</td>
       <td ${R}>${fmt(r.addToCarts)}</td><td ${R}>${atcRate.toFixed(1)}%</td>
-      <td ${R}>${fmt(r.conversions)}</td><td ${R}>${purRate.toFixed(2)}%</td>
+      <td ${R}>${fmt(r.transactions)}</td><td ${R}>${purRate.toFixed(2)}%</td>
       <td ${R}>${fmtR(r.totalRevenue)}</td>
-      <td ${R}>${tx > 0 ? fmtR(parseFloat(r.totalRevenue||0)/tx) : '<span class="na">—</span>'}</td>
+      <td ${R}>${parseFloat(r.transactions||0) > 0 ? fmtR(parseFloat(r.totalRevenue||0)/parseFloat(r.transactions)) : '<span class="na">—</span>'}</td>
       <td ${R}>${fmtR(dayAdRev)}</td>
       <td ${R}>${dayRevPct.toFixed(1)}%</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
@@ -2195,7 +2194,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const totalSess       = dailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const totalItemsViewed= (cache.daily_items||[]).filter(r=>r.date>=sinceD&&r.date<=untilD).reduce((s,r)=>s+parseFloat(r.itemsViewed||0),0);
   const totalATC        = dailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
-  const totalConv       = dailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
+  const totalConv       = dailyAsc.reduce((s,r)=>s+parseFloat(r.transactions||0),0);
   const totalRev        = dailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
 
   // 商品彙總
@@ -2263,7 +2262,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
   const prevDailyAsc = (cache.daily||[]).filter(r => r.date >= prevSinceD && r.date <= prevUntilD);
   const prevSess = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.sessions||0),0);
   const prevATC  = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.addToCarts||0),0);
-  const prevConv = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.conversions||0),0);
+  const prevConv = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.transactions||0),0);
   const prevRev  = prevDailyAsc.reduce((s,r)=>s+parseFloat(r.totalRevenue||0),0);
   const prevMetaSpend = (prevTrendData||[]).reduce((s,r)=>s+(r.spend||0),0);
   const prevGSpend = filterByDate(gDaily, prev.since, prev.until).reduce((s,r)=>s+(parseFloat(r['花費(TWD)'])||0),0);
@@ -2286,7 +2285,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     return `<tr>
       <td>${r.sessionDefaultChannelGrouping||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
-      <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
+      <td ${R}>${fmt(r.transactions)}<br>${diffBadge(r.transactions,p.transactions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
       <td ${R}>${revPct.toFixed(1)}%<br>${diffBadge(revPct,prevRevPct)}</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
@@ -2300,7 +2299,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     return `<tr>
       <td>${r.sessionSourceMedium||'—'}</td>
       <td ${R}>${fmt(r.sessions)}<br>${diffBadge(r.sessions,p.sessions)}</td>
-      <td ${R}>${fmt(r.conversions)}<br>${diffBadge(r.conversions,p.conversions)}</td>
+      <td ${R}>${fmt(r.transactions)}<br>${diffBadge(r.transactions,p.transactions)}</td>
       <td ${R}>${fmtR(r.totalRevenue)}<br>${diffBadge(r.totalRevenue,p.totalRevenue)}</td>
       <td ${R}>${revPct.toFixed(1)}%<br>${diffBadge(revPct,prevRevPct)}</td>
       <td ${R}>${fmtS(r.averageSessionDuration)}</td><td ${R}>${fmtB(r.bounceRate)}</td>
