@@ -203,6 +203,7 @@ GA4_METRICS  = [
     Metric(name="sessions"),
     Metric(name="addToCarts"),
     Metric(name="conversions"),
+    Metric(name="transactions"),
     Metric(name="totalRevenue"),
     Metric(name="averageSessionDuration"),
     Metric(name="bounceRate"),
