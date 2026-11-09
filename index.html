@@ -2098,7 +2098,7 @@ function renderGA4(cache, since, until, trendData, gDaily, prev, prevTrendData) 
     .filter(r => r.date >= sinceD && r.date <= untilD)
     .sort((a,b) => a.date.localeCompare(b.date));
   const dailyAscB = ga4BucketDaily(dailyAsc, ga4Grain);
-  const daily = [...dailyAscB].reverse();
+  const daily = dailyAscB;
 
   // Channels: aggregate daily_channels filtered by date range
   const chMap = {};
