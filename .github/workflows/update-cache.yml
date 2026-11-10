@@ -2,11 +2,17 @@ name: Update cache
 
 on:
   schedule:
-    - cron: '0 * * * *'    # 每小時整點
+    # 避開整點（GitHub 整點排程常被大量丟棄），一小時給三次機會
+    - cron: '7,27,47 * * * *'
   workflow_dispatch:        # 手動觸發
 
 permissions:
   contents: write
+
+# 上一輪還在跑就跳過這一輪，不要互相打斷
+concurrency:
+  group: update-cache
+  cancel-in-progress: false
 
 jobs:
   update:
