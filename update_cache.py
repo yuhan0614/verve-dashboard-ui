@@ -2,7 +2,7 @@
 Daily incremental cache update for GitHub Pages.
 Fetches last DAYS_BACK days from SHOPLINE API, GA4, and Meta, merges into existing JSON files.
 """
-import json, os, requests
+import json, os, gzip, requests
 from datetime import datetime, timedelta, timezone
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric, Dimension
@@ -246,7 +246,7 @@ def ga4_fetch(client, dimensions, metrics, start_date, end_date, limit=100000):
     return rows
 
 def update_ga4():
-    with open("ga4_cache.json") as f:
+    with gzip.open("ga4_cache.json.gz", "rt", encoding="utf-8") as f:
         cache = json.load(f)
 
     start_date = (TODAY - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
@@ -306,7 +306,7 @@ def update_ga4():
     print(f"[GA4] daily_search updated: {len(new_search)} rows")
 
     cache["updated"] = end_date
-    with open("ga4_cache.json", "w") as f:
+    with gzip.open("ga4_cache.json.gz", "wt", encoding="utf-8", compresslevel=6) as f:
         json.dump(cache, f, ensure_ascii=False)
     # write split files for fast frontend loading
     RECENT_DAYS = 200

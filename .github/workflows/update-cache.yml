@@ -36,7 +36,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sl_cache.json sl_items_cache.json sl_discounts_cache.json ga4_cache.json meta_cache.json ga4_meta.json gads_cache.json
+          git add sl_cache.json sl_items_cache.json sl_discounts_cache.json ga4_cache.json.gz meta_cache.json ga4_meta.json gads_cache.json
           git add ga4_daily.json ga4_channels.json ga4_source_medium.json ga4_items.json ga4_search.json
           git add ga4_*_recent.json
           if git diff --cached --quiet; then
