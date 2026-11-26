@@ -2702,6 +2702,16 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
   }), {gmv:0, revenue:0, orders:0, returns:0, cancelled:0, sessions:0, adSpend:0});
   const aov = total.orders > 0 ? total.gmv/total.orders : 0;
   const retCancelPct = total.gmv > 0 ? ((total.returns+total.cancelled)/total.gmv*100).toFixed(1) : '0.0';
+  // 退貨單要到訂單成立後 2~3 週才結算成「已退款」才抓得到：
+  // 15 天約可抓到最終退貨的 91%、30 天約 98%。區間若含最近 14 天，退貨會低估、營業額略偏高。
+  const RET_SETTLE_DAYS = 14;
+  const retCutoff = new Date(Date.now() - RET_SETTLE_DAYS*864e5).toISOString().slice(0,10);
+  const retGap = (until || '') >= retCutoff;
+  const retWarnIcon = retGap ? ' <span title="最近兩週的退貨尚未結算完成，退貨金額會低估、營業額略偏高" style="color:#C2342A;cursor:help">⚠</span>' : '';
+  const retWarnBanner = retGap ? `<div style="margin-bottom:14px;padding:10px 14px;border:1px solid #E7C9A9;background:#FDF6EC;border-radius:6px;font-size:13px;line-height:1.6;color:#6B4E2E">
+      <strong>⚠ 最近兩週的退貨尚未結算完成</strong>　—　退貨單要到訂單成立後 2~3 週才會結算為「已退款」，因此這段期間的<strong>退貨金額會低估、總營業額略為偏高</strong>。
+      經驗值：15 天可抓到最終退貨的約 <strong>91%</strong>、30 天約 <strong>98%</strong>，想抓準可把區間結束日往前推兩週。
+    </div>` : '';
   const siteRoas = total.adSpend > 0 ? total.gmv/total.adSpend : 0;
 
   // 前同期
@@ -2715,12 +2725,13 @@ function renderSholine(json, since, until, trendData, gDaily, prev, prevTrendDat
   const prevSiteRoas = pt.adSpend > 0 ? pt.gmv/pt.adSpend : 0;
 
   document.getElementById('tab-sholine').innerHTML = `
+    ${retWarnBanner}
     <div class="summary-grid">
       <div class="sc c-blue"><div class="lbl">成交額</div><div class="val">${fmtM(total.gmv)}</div><div class="sub">${diffBadge(total.gmv,pt.gmv)}</div></div>
-      <div class="sc"><div class="lbl">總營業額</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,pt.revenue)}</div></div>
+      <div class="sc"><div class="lbl">總營業額${retWarnIcon}</div><div class="val">${fmtM(total.revenue)}</div><div class="sub">${diffBadge(total.revenue,pt.revenue)}</div></div>
       <div class="sc c-purple"><div class="lbl">總訂單量</div><div class="val">${total.orders.toLocaleString()}</div><div class="sub">${diffBadge(total.orders,pt.orders)}</div></div>
       <div class="sc c-orange"><div class="lbl">平均客單價</div><div class="val">${fmtM(aov)}</div><div class="sub">${diffBadge(aov,prevAov)}</div></div>
-      <div class="sc"><div class="lbl">退貨取消佔比</div><div class="val">${retCancelPct}%</div><div class="sub">退 ${fmtM(total.returns)} / 取 ${fmtM(total.cancelled)}</div></div>
+      <div class="sc"><div class="lbl">退貨取消佔比${retWarnIcon}</div><div class="val">${retCancelPct}%</div><div class="sub">退 ${fmtM(total.returns)} / 取 ${fmtM(total.cancelled)}</div></div>
       <div class="sc c-blue"><div class="lbl">廣告花費</div><div class="val">${fmtM(total.adSpend)}</div><div class="sub">${diffBadge(total.adSpend,pt.adSpend)}</div></div>
       <div class="sc c-green"><div class="lbl">全站 ROAS</div><div class="val">${siteRoas?siteRoas.toFixed(2)+'x':'—'}</div><div class="sub">${diffBadge(siteRoas,prevSiteRoas)}</div></div>
     </div>

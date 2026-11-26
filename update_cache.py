@@ -11,6 +11,7 @@ from google.oauth2 import service_account
 TZ          = timezone(timedelta(hours=8))
 TODAY       = datetime.now(TZ)
 DAYS_BACK   = 7   # fetch last 7 days to cover any late-arriving orders
+RET_DAYS_BACK = 30  # 退貨單另外回掃 30 天（15 天可抓到約 91%、30 天約 98%）
 
 # ── SHOPLINE ─────────────────────────────────────────────────────────────────
 
@@ -188,6 +189,23 @@ def update_shopline():
             print(f"[SL] {d}: {len(orders)} orders, gmv={cache[d]['gmv']}, products={len(items_map)}, coupons={len(disc_map)}")
         except Exception as e:
             print(f"[SL] {d} error: {e}")
+
+    # 退貨單在訂單成立後 2~3 週才結算成「已退款」，DAYS_BACK=7 抓不到。
+    # 退貨單 API 很輕，這裡單獨把近 RET_DAYS_BACK 天重掃一次，只更新 returns/revenue。
+    for i in range(RET_DAYS_BACK, DAYS_BACK, -1):
+        d = (TODAY - timedelta(days=i)).strftime("%Y-%m-%d")
+        if d not in cache:
+            continue
+        try:
+            ret = sum((ro.get("total") or {}).get("cents") or 0
+                      for ro in sl_fetch_returns(d))
+            if ret == cache[d].get("returns"):
+                continue
+            cache[d]["returns"] = ret
+            cache[d]["revenue"] = cache[d]["gmv"] - cache[d]["cancelled"] - ret
+            print(f"[SL-returns] {d}: 補 returns={ret}")
+        except Exception as e:
+            print(f"[SL-returns] {d} error: {e}")
 
     with open("sl_cache.json", "w") as f:
         json.dump(cache, f, ensure_ascii=False)
